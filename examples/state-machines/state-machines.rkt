@@ -2,10 +2,12 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core))
+(require rackunit)
+(require "../../racr/core.rkt")
 
 (define sm-spec                   (create-specification))
 
@@ -42,7 +44,9 @@
 (define (set-union s1 s2)
   (append (filter (lambda (e1) (not (memq e1 s2))) s1) s2))
 (define (set-eq s1 s2)
-  (and (= (length s1) (length s2)) (for-all (lambda (e) (memq e s2)) s1)))
+  (and (= (length s1) (length s2))
+       (andmap (lambda (e) (when (memq e s2) #t))
+               s1)))
 
 (with-specification
  sm-spec
@@ -62,7 +66,7 @@
   ((StateMachine State*)
    (lambda (n)
      (define name (->name n))
-     (find
+     (findf
       (lambda (final) (eq? name final))
       (->finals (<- (<- n)))))))
  
@@ -104,8 +108,8 @@
   reachable ; Compute all states reachable from a state.
   (State
    (lambda (n)
-     (fold-left
-      (lambda (result n) (set-union result (=reachable n)))
+     (foldl
+      (lambda (n result) (set-union result (=reachable n)))
       (=successors n)
       (=successors n)))
    (list)
@@ -129,7 +133,7 @@
      (and
       (or ; From every state, except finals, a final must be reachable.
        (=final? n)
-       (find =final? (=reachable n)))
+       (findf =final? (=reachable n)))
       (or ; All states, except the initial, must be reachable from the initial.
        (eq? n (=initial-state n))
        (memq n (=reachable (=initial-state n))))))))
@@ -142,7 +146,7 @@
   (lambda (x)
     (define identifier-list?
       (lambda (l)
-        (for-all identifier? l)))
+        (andmap identifier? (syntax->list l))))
     (syntax-case x (->)
       ((_ initial (final ...) (source -> target) ...)
        (and
@@ -153,11 +157,12 @@
         (not (null? #'(final ...))))
        (with-syntax
            (((state ...)
-             (let loop ((input #'(initial final ... source ... target ...))
+             (let loop ((input (syntax->list
+                                #'(initial final ... source ... target ...)))
                         (output (list)))
                (if (null? input)
                    output
-                   (if (find
+                   (if (findf
                         (lambda (o)
                           (eq? (syntax->datum (car input)) (syntax->datum o)))
                         output)
@@ -175,9 +180,9 @@
 
 (define (run-tests)
   (define (assert-sucessors sm s l)
-    (assert (set-eq (map ->name (=successors (=lookup-state sm s))) l)))
+    (check-true (set-eq (map ->name (=successors (=lookup-state sm s))) l)))
   (define (assert-reachable sm s l)
-    (assert (set-eq (map ->name (=reachable (=lookup-state sm s))) l)))
+    (check-true (set-eq (map ->name (=reachable (=lookup-state sm s))) l)))
   
   (define sm-1
     ; Correct machine:
@@ -258,29 +263,29 @@
      (s8 -> s7)))
   
   ; Test sm-1:
-  (assert (=lookup-state sm-1 's5))
-  (assert (not (=lookup-state sm-1 'unknown-state)))
+  (check-not-false (=lookup-state sm-1 's5))
+  (check-true (not (=lookup-state sm-1 'unknown-state)))
   (assert-sucessors sm-1 's1 '(s1 s2 s3))
   (assert-reachable sm-1 's6 '(s1 s2 s3 s4 s5 s6 s7))
-  (assert (=correct? sm-1))
+  (check-true (=correct? sm-1))
   (rewrite-add (->State* sm-1) (:State 'sn))
   (rewrite-add (->Transition* sm-1) (:Transition 's3 'sn))
-  (assert (not (=correct? sm-1)))
+  (check-true (not (=correct? sm-1)))
   (rewrite-terminal 'finals sm-1 (cons 'sn (->finals sm-1)))
-  (assert (=correct? sm-1))
+  (check-true (=correct? sm-1))
   (rewrite-terminal 'finals sm-1 (list 's4))
-  (assert (not (=correct? sm-1)))
+  (check-true (not (=correct? sm-1)))
   (rewrite-add (->Transition* sm-1) (:Transition 'sn 's5))
-  (assert (=correct? sm-1))
+  (check-true (=correct? sm-1))
   
   ; Test sm-2:
-  (assert (not (=correct? sm-2)))
+  (check-true (not (=correct? sm-2)))
   
   ; Test sm-3:
-  (assert (not (=correct? sm-3)))
+  (check-true (not (=correct? sm-3)))
   
   ; Test sm-4:
-  (assert (=correct? sm-4))
+  (check-true (=correct? sm-4))
   (assert-reachable sm-4 's3 '(s5 s4 s7 s6 s8))
   (assert-reachable sm-4 's6 '(s8 s7))
   (assert-reachable sm-4 's5 '(s4 s7))
