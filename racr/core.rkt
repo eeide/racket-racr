@@ -2,14 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (racr core)
- (export
+(provide
   ; Specification interface:
-  (rename (make-racr-specification create-specification))
+  (rename-out (make-racr-specification create-specification))
   ; Specification query interface:
   specification->phase
   specification->start-symbol
@@ -29,7 +28,7 @@
   attribute->inherited?
   attribute->cached?
   ; ASTs: Specification
-  (rename (specify-ast-rule ast-rule))
+  (rename-out (specify-ast-rule ast-rule))
   compile-ast-specifications
   ; ASTs: Construction
   create-ast
@@ -60,7 +59,7 @@
   ; Attribution: Specification
   specify-attribute
   specify-pattern
-  (rename (specify-ag-rule ag-rule))
+  (rename-out (specify-ag-rule ag-rule))
   compile-ag-specifications
   ; Attribution: Querying
   att-value
@@ -86,16 +85,19 @@
   with-specification
   with-bindings
   ; Utility interface:
-  racr-exception?)
- (import (rnrs) (rnrs mutable-pairs))
- 
+  ; racr-exception?
+  )
+(require racket/list)
+
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Internal Data Structures ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  
  ; Constructor for unique entities internally used by the RACR system
- (define-record-type racr-nil-record
-   (sealed #t)(opaque #t))
+ (struct racr-nil-record ()
+   #:constructor-name make-racr-nil-record
+   ; (sealed #t)(opaque #t)
+   )
  (define racr-nil (make-racr-nil-record)) ; Unique value indicating undefined RACR entities
  
  ; Record type representing RACR compiler specifications. A compiler specification consists of arbitrary
@@ -107,42 +109,38 @@
  ; 2 : AG specification
  ; 3 : Rewrite specification
  ; 4 : Specification finished
- (define-record-type racr-specification
-   (fields (mutable specification-phase) rules-table (mutable start-symbol))
-   (opaque #t)(sealed #t)
-   (protocol
-    (lambda (new)
-      (lambda ()
-        (new 1 (make-eq-hashtable 50) racr-nil)))))
- 
+ (struct racr-specification
+   ((specification-phase #:mutable) rules-table (start-symbol #:mutable))
+   ; (opaque #t)(sealed #t)
+   )
+ (define (make-racr-specification)
+   (racr-specification 1 (make-hasheq) racr-nil))
+
  ; INTERNAL FUNCTION: Given a RACR specification and a non-terminal, return the
  ; non-terminal's AST rule or #f if it is undefined.
  (define racr-specification-find-rule
    (lambda (spec non-terminal)
-     (hashtable-ref (racr-specification-rules-table spec) non-terminal #f)))
+     (hash-ref (racr-specification-rules-table spec) non-terminal #f)))
  
  ; INTERNAL FUNCTION: Given a RACR specification return a list of its AST rules.
  (define racr-specification-rules-list
    (lambda (spec)
-     (call-with-values
-      (lambda ()
-        (hashtable-entries (racr-specification-rules-table spec)))
-      (lambda (key-vector value-vector)
-        (vector->list value-vector)))))
+     (hash-values (racr-specification-rules-table spec))))
  
  ; Record type for AST rules; An AST rule has a reference to the RACR specification it belongs to and consist
  ; of its symbolic encoding, a production (i.e., a list of production-symbols) and an optional supertype.
- (define-record-type ast-rule
-   (fields specification as-symbol (mutable production) (mutable supertype?))
-   (opaque #t)(sealed #t))
+ (struct ast-rule
+   (specification as-symbol (production #:mutable) (supertype? #:mutable))
+   ; (opaque #t)(sealed #t))
+   #:constructor-name make-ast-rule)
  
  ; INTERNAL FUNCTION: Given an AST rule find a certain child context by name. If the rule defines no such
  ; context, return #f, otherwise the production symbol defining the respective context.
  (define ast-rule-find-child-context
    (lambda (r context-name)
-     (find
+     (findf
       (lambda (symbol)
-        (eq? (symbol-context-name symbol) context-name))
+        (eq? (psymbol-context-name symbol) context-name))
       (cdr (ast-rule-production r)))))
  
  ; INTERNAL FUNCTION: Given two rules r1 and r2, return whether r1 is a subtype of r2 or not. The subtype
@@ -172,9 +170,10 @@
  ; the respective non-terminal), a flag indicating whether it represents a Kleene closure (i.e., is a list
  ; of certain type) or not, a context-name unambiguously referencing it within the production it is part of
  ; and a list of attributes defined for it.
- (define-record-type (symbol make-production-symbol production-symbol?)
-   (fields name ast-rule (mutable non-terminal?) kleene? context-name (mutable attributes))
-   (opaque #t)(sealed #t))
+ (struct psymbol
+   (name ast-rule (non-terminal? #:mutable) kleene? context-name (attributes #:mutable))
+   ; (opaque #t)(sealed #t)
+   #:constructor-name make-psymbol)
  
  ; Record type for attribute definitions. An attribute definition has a certain name, a definition context
  ; (i.e., a symbol of an AST rule), an equation and an optional circularity-definition used for fix-point
@@ -183,9 +182,10 @@
  ; bottom-value is the value fix-point computations start with and equivalence-functions are used to decide
  ; whether a fix-point is reached or not (i.e., equivalence-functions are arbitrary functions of arity two
  ; computing whether two given arguments are equal or not).
- (define-record-type attribute-definition
-   (fields name context equation circularity-definition cached?)
-   (opaque #t)(sealed #t))
+ (struct attribute-definition
+   (name context equation circularity-definition cached?)
+   ; (opaque #t)(sealed #t)
+   #:constructor-name make-attribute-definition)
  
  ; INTERNAL FUNCTION: Given an attribute definition, check if instances can depend on
  ; themself (i.e., be circular) or not.
@@ -198,7 +198,7 @@
  (define attribute-definition-synthesized?
    (lambda (att-def)
      (let ((symbol (attribute-definition-context att-def)))
-       (eq? (car (ast-rule-production (symbol-ast-rule symbol))) symbol))))
+       (eq? (car (ast-rule-production (psymbol-ast-rule symbol))) symbol))))
  
  ; INTERNAL FUNCTION: Given an attribute definition, return whether it specifies
  ; an inherited attribute or not.
@@ -209,27 +209,25 @@
  ; Record type for AST nodes. AST nodes have a reference to the evaluator state used for evaluating their
  ; attributes and rewrites, the AST rule they represent a context of, their parent, children, attribute
  ; instances, attribute cache entries they influence and annotations.
- (define-record-type node
-   (fields
-    (mutable evaluator-state)
-    (mutable ast-rule)
-    (mutable parent)
-    (mutable children)
-    (mutable attributes)
-    (mutable cache-influences)
-    (mutable annotations))
-   (opaque #t)(sealed #t)
-   (protocol
-    (lambda (new)
-      (lambda (ast-rule parent children)
-        (new
-         #f
-         ast-rule
-         parent
-         children
-         (list)
-         (list)
-         (list))))))
+ (struct node
+   ((evaluator-state #:mutable)
+    (ast-rule #:mutable)
+    (parent #:mutable)
+    (children #:mutable)
+    (attributes #:mutable)
+    (cache-influences #:mutable)
+    (annotations #:mutable))
+   ; (opaque #t)(sealed #t)
+   )
+ (define (make-node ast-rule parent children)
+   (node
+    #f
+    ast-rule
+    parent
+    children
+    (list)
+    (list)
+    (list)))
  
  ; INTERNAL FUNCTION: Given a node, return whether it is a terminal or not.
  (define node-terminal?
@@ -273,7 +271,7 @@
                      (children (node-children n)))
             (if (null? contexts)
                 #f
-                (if (eq? (symbol-context-name (car contexts)) context-name)
+                (if (eq? (psymbol-context-name (car contexts)) context-name)
                     (car children)
                     (loop (cdr contexts) (cdr children))))))))
  
@@ -281,7 +279,7 @@
  ; has no such attribute, return #f, otherwise the attribute.
  (define node-find-attribute
    (lambda (n name)
-     (find
+     (findf
       (lambda (att)
         (eq? (attribute-definition-name (attribute-instance-definition att)) name))
       (node-attributes n))))
@@ -296,13 +294,12 @@
  
  ; Record type for attribute instances of a certain attribute definition, associated with
  ; a certain node (context) and a cache.
- (define-record-type attribute-instance
-   (fields (mutable definition) (mutable context) cache)
-   (opaque #t)(sealed #t)
-   (protocol
-    (lambda (new)
-      (lambda (definition context)
-        (new definition context (make-hashtable equal-hash equal? 1))))))
+ (struct attribute-instance
+   ((definition #:mutable) (context #:mutable) cache)
+   ; (opaque #t)(sealed #t)
+   )
+ (define (make-attribute-instance definition context)
+   (attribute-instance definition context (make-hash)))
  
  ; Record type for attribute cache entries. Attribute cache entries represent the values of
  ; and dependencies between attribute instances evaluated for certain arguments. The attribute
@@ -311,44 +308,41 @@
  ; not evaluated but its context is circular it stores an intermediate result of its fixpoint
  ; computation, called cycle value. Entries also track whether they are already in evaluation or
  ; not, such that the attribute evaluator can detect unexpected cycles.
- (define-record-type attribute-cache-entry
-   (fields
-    (mutable context)
-    (mutable arguments)
-    (mutable value)
-    (mutable cycle-value)
-    (mutable entered?)
-    (mutable node-dependencies)
-    (mutable cache-dependencies)
-    (mutable cache-influences))
-   (opaque #t)(sealed #t)
-   (protocol
-    (lambda (new)
-      (lambda (att arguments) ; att: The attribute instance for which to construct a cache entry
-        (new
-         att
-         arguments
-         racr-nil
-         (let ((circular? (attribute-definition-circularity-definition (attribute-instance-definition att))))
-           (if circular?
-               (car circular?)
-               racr-nil))
-         #f
-         (list)
-         (list)
-         (list))))))
+ (struct attribute-cache-entry
+   ((context #:mutable)
+    (arguments #:mutable)
+    (value #:mutable)
+    (cycle-value #:mutable)
+    (entered? #:mutable)
+    (node-dependencies #:mutable)
+    (cache-dependencies #:mutable)
+    (cache-influences #:mutable))
+   ; (opaque #t)(sealed #t)
+   )
+ (define (make-attribute-cache-entry att arguments) ; att: The attribute instance for which to construct a cache entry
+   (attribute-cache-entry
+    att
+    arguments
+    racr-nil
+    (let ((circular? (attribute-definition-circularity-definition (attribute-instance-definition att))))
+      (if circular?
+          (car circular?)
+          racr-nil))
+    #f
+    (list)
+    (list)
+    (list)))
  
  ; Record type representing the internal state of RACR systems throughout their execution, i.e., while
  ; evaluating attributes and rewriting ASTs. An evaluator state consists of a flag indicating if the AG
  ; currently performs a fix-point evaluation, a flag indicating if throughout a fix-point iteration the
  ; value of an attribute changed and an attribute evaluation stack used for dependency tracking.
- (define-record-type evaluator-state
-   (fields (mutable ag-in-cycle?) (mutable ag-cycle-change?) (mutable evaluation-stack))
-   (opaque #t)(sealed #t)
-   (protocol
-    (lambda (new)
-      (lambda ()
-        (new #f #f (list))))))
+ (struct evaluator-state
+   ((ag-in-cycle? #:mutable) (ag-cycle-change? #:mutable) (evaluation-stack #:mutable))
+   ; (opaque #t)(sealed #t)
+   )
+ (define (make-evaluator-state)
+   (evaluator-state #f #f (list)))
  
  ; INTERNAL FUNCTION: Given an evaluator state, return whether it represents an evaluation in progress or
  ; not; If it represents an evaluation in progress return the current attribute in evaluation, otherwise #f.
@@ -364,11 +358,11 @@
  ; representation of it using display.
  (define object->string
    (lambda (x)
-     (call-with-string-output-port
+     (call-with-output-string
       (lambda (port)
         (display x port)))))
  
- (define-condition-type racr-exception &violation make-racr-exception racr-exception?)
+ ; (define-condition-type racr-exception &violation make-racr-exception racr-exception?)
  
  ; INTERNAL FUNCTION: Given an arbitrary sequence of strings and other Scheme entities, concatenate them to
  ; form an error message and throw a special RACR exception with the constructed message. Any entity that is
@@ -377,16 +371,7 @@
  (define-syntax throw-exception
    (syntax-rules ()
      ((_ m-part ...)
-      (raise-continuable
-       (condition
-        (make-racr-exception)
-        (make-message-condition
-         (string-append
-          "RACR exception: "
-          (let ((m-part* m-part))
-            (if (string? m-part*)
-                m-part*
-                (string-append "[" (object->string m-part*) "]"))) ...)))))))
+      (raise-user-error "RACR exception:" m-part ...))))
  
  ; INTERNAL FUNCTION: Procedure sequentially applying a function on all the AST rules of a set of rules which
  ; inherit, whereby supertypes are processed before their subtypes.
@@ -403,7 +388,7 @@
                     (ast-rule-supertype? rule))
                   rules)))
        (let ((to-resolve ; ...Find a rule that still must be processed and...
-              (find
+              (findf
                (lambda (rule)
                  (memq (ast-rule-supertype? rule) resolved)) ; ...whose supertype already has been processed....
                to-check)))
@@ -464,7 +449,7 @@
    (lambda (node type name value)
      (when (evaluator-state-in-evaluation? (node-evaluator-state node))
        (throw-exception
-        "Cannot weave " name " annotation; "
+        "Cannot weave" name "annotation;"
         "There are attributes in evaluation."))
      (when (not (ast-annotation? node name))
        (cond
@@ -484,7 +469,7 @@
    (lambda (node name)
      (when (evaluator-state-in-evaluation? (node-evaluator-state node))
        (throw-exception
-        "Cannot check for " name " annotation; "
+        "Cannot check for" name "annotation;"
         "There are attributes in evaluation."))
      (assq name (node-annotations node))))
  
@@ -492,24 +477,24 @@
    (lambda (node name)
      (when (evaluator-state-in-evaluation? (node-evaluator-state node))
        (throw-exception
-        "Cannot access " name " annotation; "
+        "Cannot access" name "annotation;"
         "There are attributes in evaluation."))
      (let ((annotation (ast-annotation? node name)))
        (if annotation
            (cdr annotation)
            (throw-exception
-            "Cannot access " name " annotation; "
+            "Cannot access" name "annotation;"
             "The given node has no such annotation.")))))
  
  (define ast-annotation-set!
    (lambda (node name value)
      (when (evaluator-state-in-evaluation? (node-evaluator-state node))
        (throw-exception
-        "Cannot set " name " annotation; "
+        "Cannot set" name "annotation;"
         "There are attributes in evaluation."))
      (when (not (symbol? name))
        (throw-exception
-        "Cannot set " name " annotation; "
+        "Cannot set" name "annotation;"
         "Annotation names must be Scheme symbols."))
      (let ((annotation (ast-annotation? node name))
            (value
@@ -517,19 +502,22 @@
                 (lambda args
                   (apply value node args))
                 value)))
-       (if annotation
-           (set-cdr! annotation value)
-           (node-annotations-set! node (cons (cons name value) (node-annotations node)))))))
- 
+       (set-node-annotations!
+        node
+        (cons (cons name value)
+              (filter-not
+               (lambda (entry) (eq? (car entry) name))
+               (node-annotations node)))))))
+
  (define ast-annotation-remove!
    (lambda (node name)
      (when (evaluator-state-in-evaluation? (node-evaluator-state node))
        (throw-exception
-        "Cannot remove " name " annotation; "
+        "Cannot remove" name "annotation;"
         "There are attributes in evaluation."))
-     (node-annotations-set!
+     (set-node-annotations!
       node
-      (remp
+      (filter-not
        (lambda (entry)
          (eq? (car entry) name))
        (node-annotations node)))))
@@ -543,9 +531,9 @@
      ;;; Ensure, that the RACR system is in the correct specification phase:
      (when (> (racr-specification-specification-phase spec) 1)
        (throw-exception
-        "Unexpected AST rule " rule "; "
+        "Unexpected AST rule" rule ";"
         "AST rules can only be defined in the AST specification phase."))
-     (letrec* ((ast-rule ; The parsed AST rule that will be added to the given specification.
+     (letrec  ((ast-rule ; The parsed AST rule that will be added to the given specification.
                 (make-ast-rule
                  spec
                  rule
@@ -572,21 +560,21 @@
                 (lambda (c)
                   (if (eos?)
                       (throw-exception
-                       "Unexpected end of AST rule " rule ";"
-                       "Expected " c " character.")
+                       "Unexpected end of AST rule" rule ";"
+                       "Expected" c "character.")
                       (if (char=? (my-peek-char) c)
                           (set! pos (+ pos 1))
                           (throw-exception
-                           "Invalid AST rule " rule "; "
-                           "Unexpected " (my-peek-char) " character.")))))
+                           "Invalid AST rule" rule ";"
+                           "Unexpected" (my-peek-char) "character.")))))
                ; Support function parsing a symbol, i.e., retrieving its name, type, if it is a list and optional context name.
                (parse-symbol
                 (lambda (location) ; location: l-hand, r-hand 
                   (let ((symbol-type (if (eq? location 'l-hand) "non-terminal" "terminal")))
                     (when (eos?)
                       (throw-exception
-                       "Unexpected end of AST rule " rule "; "
-                       "Expected " symbol-type "."))
+                       "Unexpected end of AST rule" rule ";"
+                       "Expected" symbol-type "."))
                     (let* ((parse-name
                             (lambda (terminal?)
                               (let ((name
@@ -596,8 +584,8 @@
                                             (begin
                                               (when (and terminal? (not (char-lower-case? (my-peek-char))))
                                                 (throw-exception
-                                                 "Invalid AST rule " rule "; "
-                                                 "Unexpected " (my-peek-char) " character."))
+                                                 "Invalid AST rule" rule ";"
+                                                 "Unexpected" (my-peek-char) "character."))
                                               (loop (cons (my-read-char) chars)))
                                             (reverse chars)))
                                       (let loop ((chars (list)))
@@ -606,11 +594,11 @@
                                             (reverse chars))))))
                                 (when (null? name)
                                   (throw-exception
-                                   "Unexpected " (my-peek-char) " character in AST rule " rule "; "
-                                   "Expected " symbol-type "."))
+                                   "Unexpected" (my-peek-char) "character in AST rule" rule ";"
+                                   "Expected" symbol-type "."))
                                 (unless (char-alphabetic? (car name))
                                   (throw-exception
-                                   "Malformed name in AST rule " rule "; "
+                                   "Malformed name in AST rule" rule ";"
                                    "Names must start with a letter."))
                                 name)))
                            (terminal? (char-lower-case? (my-peek-char)))
@@ -634,9 +622,9 @@
                            (name-symbol (string->symbol name-string)))
                       (when (and terminal? (eq? location 'l-hand))
                         (throw-exception
-                         "Unexpected " name " terminal in AST rule " rule "; "
+                         "Unexpected" name "terminal in AST rule" rule ";"
                          "Left hand side symbols must be non-terminals."))
-                      (make-production-symbol
+                      (make-psymbol
                        name-symbol
                        ast-rule
                        (not terminal?)
@@ -646,13 +634,13 @@
                            (if kleene?
                                (string->symbol (string-append name-string "*"))
                                name-symbol))
-                       (list))))))
-               (l-hand (parse-symbol 'l-hand)); The rule's l-hand
-               (supertype ; The rule's super-type
-                (and (not (eos?)) (char=? (my-peek-char) #\:) (my-read-char) (symbol-name (parse-symbol 'l-hand)))))
+                       (list)))))))
+       (let ((l-hand (parse-symbol 'l-hand)); The rule's l-hand
+             (supertype ; The rule's super-type
+              (and (not (eos?)) (char=? (my-peek-char) #\:) (my-read-char) (psymbol-name (parse-symbol 'l-hand)))))
               (match-char! #\-)
               (match-char! #\>)
-              (ast-rule-production-set!
+              (set-ast-rule-production!
                ast-rule
                (append
                 (list l-hand)
@@ -665,18 +653,18 @@
                       (begin
                         (match-char! #\-)
                         (loop (cons (parse-symbol 'r-hand) r-hand)))))))
-              (ast-rule-supertype?-set!
+              (set-ast-rule-supertype?!
                ast-rule
                supertype)
               ; Check, that the rule's l-hand is not already defined:
-              (when (racr-specification-find-rule spec (symbol-name l-hand))
+              (when (racr-specification-find-rule spec (psymbol-name l-hand))
                 (throw-exception
-                 "Invalid AST rule " rule "; "
-                 "Redefinition of " (symbol-name l-hand) "."))
-              (hashtable-set! ; Add the rule to the RACR specification.
+                 "Invalid AST rule" rule ";"
+                 "Redefinition of" (psymbol-name l-hand) "."))
+              (hash-set! ; Add the rule to the RACR specification.
                (racr-specification-rules-table spec)
-               (symbol-name l-hand)
-               ast-rule))))
+               (psymbol-name l-hand)
+               ast-rule)))))
  
  (define compile-ast-specifications
    (lambda (spec start-symbol)
@@ -684,20 +672,20 @@
      (let ((current-phase (racr-specification-specification-phase spec)))
        (if (> current-phase 1)
            (throw-exception
-            "Unexpected AST compilation; "
+            "Unexpected AST compilation;"
             "The AST specifications already have been compiled.")
            ; ...iff so proceed to the next specification phase:
-           (racr-specification-specification-phase-set! spec (+ current-phase 1))))
+           (set-racr-specification-specification-phase! spec (+ current-phase 1))))
      
-     (racr-specification-start-symbol-set! spec start-symbol)
+     (set-racr-specification-start-symbol! spec start-symbol)
      (let* ((rules-list (racr-specification-rules-list spec))
             ; Support function, that given a rule R returns a list of all rules directly derivable from R:
             (derivable-rules
              (lambda (rule*)
-               (fold-left
-                (lambda (result symb*)
-                  (if (symbol-non-terminal? symb*)
-                      (append result (list (symbol-non-terminal? symb*)) (ast-rule-subtypes (symbol-non-terminal? symb*)))
+               (foldl
+                (lambda (symb* result)
+                  (if (psymbol-non-terminal? symb*)
+                      (append result (list (psymbol-non-terminal? symb*)) (ast-rule-subtypes (psymbol-non-terminal? symb*)))
                       result))
                 (list)
                 (cdr (ast-rule-production rule*))))))
@@ -709,18 +697,18 @@
             (let ((supertype-entry (racr-specification-find-rule spec (ast-rule-supertype? rule*))))
               (if (not supertype-entry)
                   (throw-exception
-                   "Invalid AST rule " (ast-rule-as-symbol rule*) "; "
-                   "The supertype " (ast-rule-supertype? rule*) " is not defined.")
-                  (ast-rule-supertype?-set! rule* supertype-entry))))
+                   "Invalid AST rule" (ast-rule-as-symbol rule*) ";"
+                   "The supertype" (ast-rule-supertype? rule*) "is not defined.")
+                  (set-ast-rule-supertype?! rule* supertype-entry))))
           (for-each
            (lambda (symb*)
-             (when (symbol-non-terminal? symb*)
-               (let ((symb-definition (racr-specification-find-rule spec (symbol-name symb*))))
+             (when (psymbol-non-terminal? symb*)
+               (let ((symb-definition (racr-specification-find-rule spec (psymbol-name symb*))))
                  (when (not symb-definition)
                    (throw-exception
-                    "Invalid AST rule " (ast-rule-as-symbol rule*) "; "
-                    "Non-terminal " (symbol-name symb*) " is not defined."))
-                 (symbol-non-terminal?-set! symb* symb-definition))))
+                    "Invalid AST rule" (ast-rule-as-symbol rule*) ";"
+                    "Non-terminal" (psymbol-name symb*) "is not defined."))
+                 (set-psymbol-non-terminal?! symb* symb-definition))))
            (cdr (ast-rule-production rule*))))
         rules-list)
        
@@ -729,31 +717,31 @@
         (lambda (rule*)
           (when (memq rule* (ast-rule-subtypes rule*))
             (throw-exception
-             "Invalid AST grammar; "
-             "The definition of " (ast-rule-as-symbol rule*) " depends on itself (cyclic inheritance).")))
+             "Invalid AST grammar;"
+             "The definition of" (ast-rule-as-symbol rule*) "depends on itself (cyclic inheritance).")))
         rules-list)
        
        ;;; Ensure, that the start symbol is defined:
        (unless (racr-specification-find-rule spec start-symbol)
          (throw-exception
-          "Invalid AST grammar; "
-          "The start symbol " start-symbol " is not defined."))
+          "Invalid AST grammar;"
+          "The start symbol" start-symbol "is not defined."))
        
        ;;; Resolve inherited production symbols:
        (apply-wrt-ast-inheritance
         (lambda (rule)
-          (ast-rule-production-set!
+          (set-ast-rule-production!
            rule
            (append
             (list (car (ast-rule-production rule)))
             (map
              (lambda (symbol)
-               (make-production-symbol
-                (symbol-name symbol)
+               (make-psymbol
+                (psymbol-name symbol)
                 rule
-                (symbol-non-terminal? symbol)
-                (symbol-kleene? symbol)
-                (symbol-context-name symbol)
+                (psymbol-non-terminal? symbol)
+                (psymbol-kleene? symbol)
+                (psymbol-context-name symbol)
                 (list)))
              (cdr (ast-rule-production (ast-rule-supertype? rule))))
             (cdr (ast-rule-production rule)))))
@@ -764,10 +752,10 @@
         (lambda (ast-rule)
           (for-each
            (lambda (symbol)
-             (unless (eq? (ast-rule-find-child-context ast-rule (symbol-context-name symbol)) symbol)
+             (unless (eq? (ast-rule-find-child-context ast-rule (psymbol-context-name symbol)) symbol)
                (throw-exception
-                "Invalid AST grammar; "
-                "The context name " (symbol-context-name symbol) " is not unique for rule " (ast-rule-as-symbol ast-rule) ".")))
+                "Invalid AST grammar;"
+                "The context name" (psymbol-context-name symbol) "is not unique for rule" (ast-rule-as-symbol ast-rule) ".")))
            (cdr (ast-rule-production ast-rule))))
         rules-list)
        
@@ -795,32 +783,32 @@
                  rules-list)))
            (unless (null? non-derivable-rules)
              (throw-exception
-              "Invalid AST grammar; "
-              "The rules " (map ast-rule-as-symbol non-derivable-rules) " cannot be derived."))))
+              "Invalid AST grammar;"
+              "The rules" (map ast-rule-as-symbol non-derivable-rules) "cannot be derived."))))
        
        ;;; Ensure, that all non-terminals are productive:
        (let* ((productive-rules (list))
               (to-check rules-list)
               (productive-rule?
                (lambda (rule*)
-                 (not (find
+                 (not (findf
                        (lambda (symb*)
                          (and
-                          (symbol-non-terminal? symb*)
-                          (not (symbol-kleene? symb*)) ; Unbounded repetitions are always productive because of the empty list.
-                          (not (memq (symbol-non-terminal? symb*) productive-rules))))
+                          (psymbol-non-terminal? symb*)
+                          (not (psymbol-kleene? symb*)) ; Unbounded repetitions are always productive because of the empty list.
+                          (not (memq (psymbol-non-terminal? symb*) productive-rules))))
                        (cdr (ast-rule-production rule*)))))))
          (let loop ()
            (let ((productive-rule
-                  (find productive-rule? to-check)))
+                  (findf productive-rule? to-check)))
              (when productive-rule
                (set! to-check (remq productive-rule to-check))
                (set! productive-rules (cons productive-rule productive-rules))
                (loop))))
          (unless (null? to-check)
            (throw-exception
-            "Invalid AST grammar; "
-            "The rules " (map ast-rule-as-symbol to-check) " are not productive."))))))
+            "Invalid AST grammar;"
+            "The rules" (map ast-rule-as-symbol to-check) "are not productive."))))))
  
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Attribute Specification ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -874,17 +862,17 @@
                   "Circularity definition : #f or (bottom-value equivalence-function) pair"))))
        (when wrong-argument-type
          (throw-exception
-          "Invalid attribute definition; "
+          "Invalid attribute definition;"
           "Wrong argument type (" wrong-argument-type ").")))
      (unless (= (racr-specification-specification-phase spec) 2) ; ...that the RACR system is in the correct specification phase,...
        (throw-exception
-        "Unexpected " attribute-name " attribute definition; "
+        "Unexpected" attribute-name "attribute definition;"
         "Attributes can only be defined in the AG specification phase."))
      (let ((ast-rule (racr-specification-find-rule spec non-terminal)))
        (unless ast-rule ; ...the given AST rule is defined,...
          (throw-exception
-          "Invalid attribute definition; "
-          "The non-terminal " non-terminal " is not defined."))
+          "Invalid attribute definition;"
+          "The non-terminal" non-terminal "is not defined."))
        (let* ((context? ; ...the given context exists,...
                (if (symbol? context-name-or-position)
                    (if (eq? context-name-or-position '*)
@@ -892,24 +880,24 @@
                        (ast-rule-find-child-context ast-rule context-name-or-position))
                    (if (>= context-name-or-position (length (ast-rule-production ast-rule)))
                        (throw-exception
-                        "Invalid attribute definition; "
-                        "There exists no " context-name-or-position "'th position in the context of " non-terminal ".")
+                        "Invalid attribute definition;"
+                        "There exists no" context-name-or-position "'th position in the context of" non-terminal ".")
                        (list-ref (ast-rule-production ast-rule) context-name-or-position)))))
          (unless context?
            (throw-exception
-            "Invalid attribute definition; "
-            "The non-terminal " non-terminal " has no " context-name-or-position " context."))
-         (unless (symbol-non-terminal? context?) ; ...it is a non-terminal and...
+            "Invalid attribute definition;"
+            "The non-terminal" non-terminal "has no" context-name-or-position "context."))
+         (unless (psymbol-non-terminal? context?) ; ...it is a non-terminal and...
            (throw-exception
-            "Invalid attribute definition; "
-            non-terminal context-name-or-position " is a terminal."))
+            "Invalid attribute definition;"
+            non-terminal context-name-or-position "is a terminal."))
          ; ...the attribute is not already defined for it:
-         (when (memq attribute-name (map attribute-definition-name (symbol-attributes context?)))
+         (when (memq attribute-name (map attribute-definition-name (psymbol-attributes context?)))
            (throw-exception
-            "Invalid attribute definition; "
-            "Redefinition of " attribute-name " for " non-terminal context-name-or-position "."))
+            "Invalid attribute definition;"
+            "Redefinition of" attribute-name "for" non-terminal context-name-or-position "."))
          ;;; Everything is fine. Thus, add the definition to the AST rule's respective symbol:
-         (symbol-attributes-set!
+         (set-psymbol-attributes!
           context?
           (cons
            (make-attribute-definition
@@ -918,7 +906,7 @@
             equation
             circularity-definition
             cached?)
-           (symbol-attributes context?)))))))
+           (psymbol-attributes context?)))))))
  
  (define compile-ag-specifications
    (lambda (spec)
@@ -926,13 +914,13 @@
      (let ((current-phase (racr-specification-specification-phase spec)))
        (when (< current-phase 2)
          (throw-exception
-          "Unexpected AG compilation; "
+          "Unexpected AG compilation;"
           "The AST specifications are not yet compiled."))
        (if (> current-phase 2)
            (throw-exception
-            "Unexpected AG compilation; "
+            "Unexpected AG compilation;"
             "The AG specifications already have been compiled.")
-           (racr-specification-specification-phase-set! spec (+ current-phase 1)))) ; ...if so proceed to the next specification phase.
+           (set-racr-specification-specification-phase! spec (+ current-phase 1)))) ; ...if so proceed to the next specification phase.
      
      ;;; Resolve attribute definitions inherited from a supertype. Thus,...
      (apply-wrt-ast-inheritance ; ...for every AST rule R which has a supertype...
@@ -942,11 +930,11 @@
           (unless (null? super-prod)
             (for-each ; ...check for every attribute definition of R's supertype...
              (lambda (super-att-def)
-               (unless (find ; ...if it is shadowed by an attribute definition of R....
+               (unless (findf ; ...if it is shadowed by an attribute definition of R....
                         (lambda (sub-att-def)
                           (eq? (attribute-definition-name sub-att-def) (attribute-definition-name super-att-def)))
-                        (symbol-attributes (car sub-prod)))
-                 (symbol-attributes-set! ; ...If not, add...
+                        (psymbol-attributes (car sub-prod)))
+                 (set-psymbol-attributes! ; ...If not, add...
                   (car sub-prod)
                   (cons
                    (make-attribute-definition ; ...a copy of the attribute definition inherited...
@@ -955,8 +943,8 @@
                     (attribute-definition-equation super-att-def)
                     (attribute-definition-circularity-definition super-att-def)
                     (attribute-definition-cached? super-att-def))
-                   (symbol-attributes (car sub-prod))))))
-             (symbol-attributes (car super-prod)))
+                   (psymbol-attributes (car sub-prod))))))
+             (psymbol-attributes (car super-prod)))
             (loop (cdr super-prod) (cdr sub-prod)))))
       (racr-specification-rules-list spec))))
  
@@ -973,8 +961,8 @@
    (lambda (name n)
      (when (node-bud-node? n)
        (throw-exception
-        "AG evaluator exception; "
-        "Cannot access " name " attribute - the given node is a bud."))
+        "AG evaluator exception;"
+        "Cannot access" name "attribute - the given node is a bud."))
      (let loop ((n n)) ; Recursively...
        (let ((att (node-find-attribute n name))) ; ...check if the current node has a proper attribute instance....
          (if att
@@ -982,8 +970,8 @@
              (let ((parent (node-parent n))) ; ...If no defining attribute instance can be found...
                (if (not parent) ; ...check if there exists a parent node that may provide a definition....
                    (throw-exception ; ...If not, throw an exception,...
-                    "AG evaluator exception; "
-                    "Cannot access unknown " name " attribute.")
+                    "AG evaluator exception;"
+                    "Cannot access unknown" name "attribute.")
                    (let* ((att (loop parent)) ; ...otherwise proceed the search at the parent node. If it succeeds...
                           (broadcaster ; ...construct a broadcasting attribute instance...
                            (make-attribute-instance
@@ -1001,7 +989,7 @@
                              (attribute-definition-circularity-definition (attribute-instance-definition att))
                              #f)
                             n)))
-                     (node-attributes-set! n (cons broadcaster (node-attributes n))) ; ...add the constructed broadcaster and...
+                     (set-node-attributes! n (cons broadcaster (node-attributes n))) ; ...add the constructed broadcaster and...
                      broadcaster)))))))) ; ...return it as the current node's look-up result.
  
  (define att-value
@@ -1019,10 +1007,10 @@
                         (let ((att-cache
                                (or
                                 ; ...finding the attribute cache entry to use...
-                                (hashtable-ref (attribute-instance-cache att) args #f)
+                                (hash-ref (attribute-instance-cache att) args #f)
                                 ; ...or construct a respective one.
                                 (let ((new-entry (make-attribute-cache-entry att args)))
-                                  (hashtable-set! (attribute-instance-cache att) args new-entry)
+                                  (hash-set! (attribute-instance-cache att) args new-entry)
                                   new-entry))))
                           (values att-cache att-cache))
                         ; If the attribute is not cached, special attention must be paid to avoid the permament storing
@@ -1036,18 +1024,18 @@
                         ; containing the temporary cycle entries and must be deleted when evaluation finished.
                         (let* ((dependency-att-cache
                                 (or
-                                 (hashtable-ref (attribute-instance-cache att) racr-nil #f)
+                                 (hash-ref (attribute-instance-cache att) racr-nil #f)
                                  (let ((new-entry (make-attribute-cache-entry att racr-nil)))
-                                   (hashtable-set! (attribute-instance-cache att) racr-nil new-entry)
-                                   (attribute-cache-entry-cycle-value-set!
+                                   (hash-set! (attribute-instance-cache att) racr-nil new-entry)
+                                   (set-attribute-cache-entry-cycle-value!
                                     new-entry
-                                    (make-hashtable equal-hash equal? 1))
+                                    (make-hash))
                                    new-entry)))
                                (evaluation-att-cache
                                 (or
-                                 (hashtable-ref (attribute-cache-entry-cycle-value dependency-att-cache) args #f)
+                                 (hash-ref (attribute-cache-entry-cycle-value dependency-att-cache) args #f)
                                  (let ((new-entry (make-attribute-cache-entry att args)))
-                                   (hashtable-set!
+                                   (hash-set!
                                     (attribute-cache-entry-cycle-value dependency-att-cache)
                                     args
                                     new-entry)
@@ -1061,8 +1049,8 @@
                        (unless ((cdr (attribute-definition-circularity-definition att-def))
                                 new-result
                                 (attribute-cache-entry-cycle-value evaluation-att-cache))
-                         (attribute-cache-entry-cycle-value-set! evaluation-att-cache new-result)
-                         (evaluator-state-ag-cycle-change?-set! evaluator-state #t))))))
+                         (set-attribute-cache-entry-cycle-value! evaluation-att-cache new-result)
+                         (set-evaluator-state-ag-cycle-change?! evaluator-state #t))))))
        ; Decide how to evaluate the attribute dependening on whether its value already is cached or its respective
        ; cache entry is circular, already in evaluation or starting point of a fix-point computation:
        (cond
@@ -1081,16 +1069,16 @@
              ; evaluation of another entry, the other depends on this one. Further this entry depends
              ; on any other entry that will be evaluated through its own evaluation. Further,..
              (add-dependency:cache->cache dependency-att-cache)
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cons dependency-att-cache (evaluator-state-evaluation-stack evaluator-state)))
              ; ...mark, that the entry is in evaluation and...
-             (attribute-cache-entry-entered?-set! evaluation-att-cache #t)
+             (set-attribute-cache-entry-entered?! evaluation-att-cache #t)
              ; ...update the evaluator's state that we are about to start a fix-point computation.
-             (evaluator-state-ag-in-cycle?-set! evaluator-state #t))
+             (set-evaluator-state-ag-in-cycle?! evaluator-state #t))
            (lambda ()
              (let loop () ; Start fix-point computation. Thus, as long as...
-               (evaluator-state-ag-cycle-change?-set! evaluator-state #f) ; ...an entry's value changes...
+               (set-evaluator-state-ag-cycle-change?! evaluator-state #f) ; ...an entry's value changes...
                (update-cycle-cache (apply (attribute-definition-equation att-def) n args)) ; ...evaluate this entry.
                (when (evaluator-state-ag-cycle-change? evaluator-state)
                  (loop)))
@@ -1111,30 +1099,30 @@
                        (if (attribute-definition-cached? att-def) ; ...check if they have to be cached and...
                            (when (eq? (attribute-cache-entry-value att-cache) racr-nil) ; ...are not already processed....
                              ; ...If so cache them,...
-                             (attribute-cache-entry-value-set!
+                             (set-attribute-cache-entry-value!
                               att-cache
                               (attribute-cache-entry-cycle-value att-cache))
-                             (attribute-cache-entry-cycle-value-set! ; ...reset their cycle values to the bottom value and...
+                             (set-attribute-cache-entry-cycle-value! ; ...reset their cycle values to the bottom value and...
                               att-cache
                               (car (attribute-definition-circularity-definition att-def)))
                              (for-each ; ...proceed with the entries they depend on.
                               loop
                               (attribute-cache-entry-cache-dependencies att-cache)))
                            ; ...If a circular entry is not cached, check if it already is processed....
-                           (when (> (hashtable-size (attribute-cache-entry-cycle-value att-cache)) 0)
+                           (when (not (hash-empty? (attribute-cache-entry-cycle-value att-cache)))
                              ; ...If not, delete its temporary cycle cache and...
-                             (hashtable-clear! (attribute-cache-entry-cycle-value att-cache))
+                             (hash-clear! (attribute-cache-entry-cycle-value att-cache))
                              (for-each ; ...proceed with the entries it depends on.
                               loop
                               (attribute-cache-entry-cache-dependencies att-cache)))))))
                result))
            (lambda ()
              ; Mark that fixpoint computation finished,...
-             (evaluator-state-ag-in-cycle?-set! evaluator-state #f)
+             (set-evaluator-state-ag-in-cycle?! evaluator-state #f)
              ; the evaluation of the attribute cache entry finished and...
-             (attribute-cache-entry-entered?-set! evaluation-att-cache #f)
+             (set-attribute-cache-entry-entered?! evaluation-att-cache #f)
              ; ...pop the entry from the evaluation stack.
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cdr (evaluator-state-evaluation-stack evaluator-state))))))
          
@@ -1154,20 +1142,20 @@
              ; evaluation of another entry, the other depends on this one. Further this entry depends
              ; on any other entry that will be evaluated through its own evaluation. Further,..
              (add-dependency:cache->cache dependency-att-cache)
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cons dependency-att-cache (evaluator-state-evaluation-stack evaluator-state)))
              ; ...mark, that the entry is in evaluation.
-             (attribute-cache-entry-entered?-set! evaluation-att-cache #t))
+             (set-attribute-cache-entry-entered?! evaluation-att-cache #t))
            (lambda ()
              (let ((result (apply (attribute-definition-equation att-def) n args))) ; Evaluate the entry and...
                (update-cycle-cache result) ; ...update its cycle value.
                result))
            (lambda ()
              ; Mark that the evaluation of the attribute cache entry finished and...
-             (attribute-cache-entry-entered?-set! evaluation-att-cache #f)
+             (set-attribute-cache-entry-entered?! evaluation-att-cache #f)
              ; ...pop it from the evaluation stack.
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cdr (evaluator-state-evaluation-stack evaluator-state))))))
          
@@ -1177,8 +1165,8 @@
           ; evaluation of another entry, the other entry depends on this one. Then,...
           (add-dependency:cache->cache dependency-att-cache)
           (throw-exception ; ...thrown an exception because we encountered an unexpected dependency cycle.
-           "AG evaluator exception; "
-           "Unexpected " name " cycle."))
+           "AG evaluator exception;"
+           "Unexpected" name "cycle."))
          
          (else ; CASE (5): Non-circular attribute not in evaluation:
           (dynamic-wind
@@ -1187,23 +1175,23 @@
              ; evaluation of another entry, the other depends on this one. Further this entry depends
              ; on any other entry that will be evaluated through its own evaluation. Further,...
              (add-dependency:cache->cache dependency-att-cache)
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cons dependency-att-cache (evaluator-state-evaluation-stack evaluator-state)))
              ; ...mark, that the entry is in evaluation.
-             (attribute-cache-entry-entered?-set! evaluation-att-cache #t))
+             (set-attribute-cache-entry-entered?! evaluation-att-cache #t))
            (lambda ()
              (let ((result (apply (attribute-definition-equation att-def) n args))) ; Evaluate the entry and,...
                (when (attribute-definition-cached? att-def) ; ...if caching is enabled,...
-                 (attribute-cache-entry-value-set! evaluation-att-cache result)) ; ...cache its value.
+                 (set-attribute-cache-entry-value! evaluation-att-cache result)) ; ...cache its value.
                result))
            (lambda ()
              ; Mark that the evaluation of the attribute cache entry finished and...
              (if (attribute-definition-cached? att-def)
-                 (attribute-cache-entry-entered?-set! evaluation-att-cache #f)
-                 (hashtable-delete! (attribute-cache-entry-cycle-value dependency-att-cache) args))
+                 (set-attribute-cache-entry-entered?! evaluation-att-cache #f)
+                 (hash-remove! (attribute-cache-entry-cycle-value dependency-att-cache) args))
              ; ...pop it from the evaluation stack.
-             (evaluator-state-evaluation-stack-set!
+             (set-evaluator-state-evaluation-stack!
               evaluator-state
               (cdr (evaluator-state-evaluation-stack evaluator-state))))))))))
  
@@ -1251,23 +1239,23 @@
  
  (define symbol->name
    (lambda (symb)
-     (symbol-name symb)))
+     (psymbol-name symb)))
  
  (define symbol->non-terminal?
    (lambda (symb)
-     (symbol-non-terminal? symb)))
+     (psymbol-non-terminal? symb)))
  
  (define symbol->kleene?
    (lambda (symb)
-     (symbol-kleene? symb)))
+     (psymbol-kleene? symb)))
  
  (define symbol->context-name
    (lambda (symb)
-     (symbol-context-name symb)))
+     (psymbol-context-name symb)))
  
  (define symbol->attributes
    (lambda (symbol)
-     (append (symbol-attributes symbol) (list)))) ; Create copy!
+     (append (psymbol-attributes symbol) (list)))) ; Create copy!
  
  ; Attribute Definition Queries:
  
@@ -1303,7 +1291,7 @@
    (lambda (n)
      (when (or (ast-list-node? n) (ast-bud-node? n)) ; Remember: Terminal nodes as such are never exposed to users.
        (throw-exception
-        "Cannot query specification; "
+        "Cannot query specification;"
         "List and bud nodes are not part of any specification."))
      ; The specification of a node can never change => No need to add dependencies!
      (ast-rule-specification (node-ast-rule n))))
@@ -1320,14 +1308,14 @@
    (lambda (n)
      (when (or (ast-list-node? n) (ast-bud-node? n)) ; Remember: Terminal nodes as such are never exposed to users.
        (throw-exception
-        "Cannot query type; "
+        "Cannot query type;"
         "List and bud nodes have no type."))
      (add-dependency:cache->node-type n)
      (node-ast-rule n)))
  
  (define ast-node-type
    (lambda (n)
-     (symbol-name (car (ast-rule-production (ast-node-rule n))))))
+     (psymbol-name (car (ast-rule-production (ast-node-rule n))))))
  
  (define ast-subtype?
    (lambda (a1 a2)
@@ -1335,11 +1323,11 @@
             (and (ast-node? a1) (or (ast-list-node? a1) (ast-bud-node? a1)))
             (and (ast-node? a2) (or (ast-list-node? a2) (ast-bud-node? a2))))
        (throw-exception
-        "Cannot perform subtype check; "
+        "Cannot perform subtype check;"
         "List and bud nodes cannot be tested for subtyping."))
      (when (and (not (ast-node? a1)) (not (ast-node? a2)))
        (throw-exception
-        "Cannot perform subtype check; "
+        "Cannot perform subtype check;"
         "At least one argument must be an AST node."))
      ((lambda (t1/t2)
         (and
@@ -1351,8 +1339,8 @@
                  (t1 (racr-specification-find-rule (ast-rule-specification t2) a1)))
             (unless t1
               (throw-exception
-               "Cannot perform subtype check; "
-               a1 " is no valid non-terminal (first argument undefined non-terminal)."))
+               "Cannot perform subtype check;"
+               a1 "is no valid non-terminal (first argument undefined non-terminal)."))
             (add-dependency:cache->node-super-type a2 t1)
             (cons t1 t2))
           (if (symbol? a2)
@@ -1360,8 +1348,8 @@
                      (t2 (racr-specification-find-rule (ast-rule-specification t1) a2)))
                 (unless t1
                   (throw-exception
-                   "Cannot perform subtype check; "
-                   a2 " is no valid non-terminal (second argument undefined non-terminal)."))
+                   "Cannot perform subtype check;"
+                   a2 "is no valid non-terminal (second argument undefined non-terminal)."))
                 (add-dependency:cache->node-sub-type a1 t2)
                 (cons t1 t2))
               (begin
@@ -1400,7 +1388,7 @@
                 (node-find-child n i)
                 (and (>= i 1) (<= i (length (node-children n))) (list-ref (node-children n) (- i 1))))))
        (unless child
-         (throw-exception "Cannot query non-existent " i (if (symbol? i) "" "'th") " child."))
+         (throw-exception "Cannot query non-existent" i (if (symbol? i) "" "'th") "child."))
        (add-dependency:cache->node child)
        (if (node-terminal? child)
            (node-children child)
@@ -1500,7 +1488,7 @@
      ;;; Before constructing the node ensure, that...
      (when (< (racr-specification-specification-phase spec) 3) ; ...the RACR system is completely specified,...
        (throw-exception
-        "Cannot construct " rule " fragment; "
+        "Cannot construct" rule "fragment;"
         "The RACR specification still must be compiled."))
      (let* ((ast-rule (racr-specification-find-rule spec rule))
             (new-fragment
@@ -1510,18 +1498,18 @@
               (list))))
        (unless ast-rule ; ...the given AST rule is defined,...
          (throw-exception
-          "Cannot construct " rule " fragment; "
+          "Cannot construct" rule "fragment;"
           "Unknown non-terminal/rule."))
        (unless (satisfies-contexts? children (cdr (ast-rule-production ast-rule))) ; ...and the children fit.
          (throw-exception
-          "Cannot construct " rule " fragment; "
+          "Cannot construct" rule "fragment;"
           "The given children do not fit."))
        ;;; When all constraints are satisfied, construct the new fragment,...
-       (node-children-set! ; ...add its children,...
+       (set-node-children! ; ...add its children,...
         new-fragment
         (map ; ...set it as parent of each child,...
          (lambda (symbol child)
-           (if (symbol-non-terminal? symbol)
+           (if (psymbol-non-terminal? symbol)
                (begin
                  (for-each ; ...flush all attribute cache entries depending on any added child being a root,...
                   (lambda (influence)
@@ -1530,7 +1518,7 @@
                    (lambda (influence)
                      (vector-ref (cdr influence) 1))
                    (node-cache-influences child)))
-                 (node-parent-set! child new-fragment)
+                 (set-node-parent! child new-fragment)
                  child)
                (make-node 'terminal new-fragment child)))
          (cdr (ast-rule-production ast-rule))
@@ -1551,12 +1539,12 @@
              #f
              (append children (list))))) ; BEWARE: create copy of children!
        (unless
-           (for-all ; ...all children fit.
+           (andmap ; ...all children fit.
                (lambda (child)
                  (valid-list-element-candidate? new-list child))
              children)
          (throw-exception
-          "Cannot construct list node; "
+          "Cannot construct list node;"
           "The given children do not fit."))
        ;;; When all constraints are satisfied,...
        (for-each ; ...flush all attribute cache entries depending on the children being roots,...
@@ -1571,7 +1559,7 @@
         children)
        (for-each ; ...set the new list node as parent of every child,...
         (lambda (child)
-          (node-parent-set! child new-list))
+          (set-node-parent! child new-list))
         children)
        (distribute-evaluator-state (make-evaluator-state) new-list) ; ...construct and distribute its evaluator state and...
        new-list))) ; ...return it.
@@ -1586,13 +1574,13 @@
    (lambda (rule)
      (create-ast
       (ast-rule-specification rule)
-      (symbol-name (car (ast-rule-production rule)))
+      (psymbol-name (car (ast-rule-production rule)))
       (map
        (lambda (symbol)
          (cond
-           ((not (symbol-non-terminal? symbol))
+           ((not (psymbol-non-terminal? symbol))
             racr-nil)
-           ((symbol-kleene? symbol)
+           ((psymbol-kleene? symbol)
             (create-ast-list (list)))
            (else (create-ast-bud))))
        (cdr (ast-rule-production rule))))))
@@ -1614,7 +1602,7 @@
    (lambda (list-node candidate)
      (let ((expected-type? ; If the list node has a parent, its parent induces a type for the list's elements.
             (if (node-parent list-node)
-                (symbol-non-terminal?
+                (psymbol-non-terminal?
                  (list-ref
                   (ast-rule-production (node-ast-rule (node-parent list-node)))
                   (node-child-index? list-node)))
@@ -1634,7 +1622,7 @@
  (define satisfies-context?
    (case-lambda
      ((child context)
-      (satisfies-context? child (symbol-non-terminal? context) (symbol-kleene? context)))
+      (satisfies-context? child (psymbol-non-terminal? context) (psymbol-kleene? context)))
      ((child non-terminal? kleene?)
       (or ; The given child is valid if either,...
        (not non-terminal?) ; ...a terminal is expected or,...
@@ -1647,7 +1635,7 @@
          (if kleene?
              (and ; ...in case a list node is expected,...
               (node-list-node? child) ; ...is a list...
-              (for-all ; ...whose children are...
+              (andmap ; ...whose children are...
                   (lambda (child)
                     (or ; ...either bud nodes or nodes of the expected type, or,...
                      (node-bud-node? child)
@@ -1663,7 +1651,7 @@
    (lambda (children contexts)
      (and
       (= (length children) (length contexts))
-      (for-all satisfies-context? children contexts))))
+      (andmap satisfies-context? children contexts))))
  
  ; INTERNAL FUNCTION: Given an AST node update its synthesized attribution (i.e., add missing synthesized
  ; attributes, delete superfluous ones, shadow equally named inherited attributes and update the
@@ -1676,25 +1664,25 @@
           (let ((att (node-find-attribute n (attribute-definition-name att-def))))
             (cond
               ((not att)
-               (node-attributes-set! n (cons (make-attribute-instance att-def n) (node-attributes n))))
+               (set-node-attributes! n (cons (make-attribute-instance att-def n) (node-attributes n))))
               ((eq? (attribute-definition-equation (attribute-instance-definition att)) (attribute-definition-equation att-def))
-               (attribute-instance-definition-set! att att-def))
+               (set-attribute-instance-definition! att att-def))
               (else
                (flush-attribute-instance att)
-               (node-attributes-set!
+               (set-node-attributes!
                 n
                 (cons (make-attribute-instance att-def n) (remq att (node-attributes n))))))))
-        (symbol-attributes (car (ast-rule-production (node-ast-rule n)))))
-       (node-attributes-set! ; Delete all synthesized attribute instances not defined anymore:
+        (psymbol-attributes (car (ast-rule-production (node-ast-rule n)))))
+       (set-node-attributes! ; Delete all synthesized attribute instances not defined anymore:
         n
-        (remp
+        (filter-not
          (lambda (att)
            (let ((remove?
                   (and
                    (attribute-definition-synthesized? (attribute-instance-definition att))
                    (not
                     (eq?
-                     (symbol-ast-rule (attribute-definition-context (attribute-instance-definition att)))
+                     (psymbol-ast-rule (attribute-definition-context (attribute-instance-definition att)))
                      (node-ast-rule n))))))
              (when remove?
                (flush-attribute-instance att))
@@ -1714,21 +1702,21 @@
             (let ((att (node-find-attribute n (attribute-definition-name att-def))))
               (cond
                 ((not att)
-                 (node-attributes-set! n (cons (make-attribute-instance att-def n) (node-attributes n))))
+                 (set-node-attributes! n (cons (make-attribute-instance att-def n) (node-attributes n))))
                 ((not (attribute-definition-synthesized? (attribute-instance-definition att)))
                  (if (eq?
                       (attribute-definition-equation (attribute-instance-definition att))
                       (attribute-definition-equation att-def))
-                     (attribute-instance-definition-set! att att-def)
+                     (set-attribute-instance-definition! att att-def)
                      (begin
                        (flush-attribute-instance att)
-                       (node-attributes-set!
+                       (set-node-attributes!
                         n
                         (cons (make-attribute-instance att-def n) (remq att (node-attributes n))))))))))
           att-defs)
-         (node-attributes-set! ; Delete all inherited attribute instances not defined anymore:
+         (set-node-attributes! ; Delete all inherited attribute instances not defined anymore:
           n
-          (remp
+          (filter-not
            (lambda (att)
              (let ((remove?
                     (and
@@ -1745,12 +1733,12 @@
                ((not parent)
                 (list))
                ((not (node-list-node? parent))
-                (symbol-attributes
+                (psymbol-attributes
                  (list-ref
                   (ast-rule-production (node-ast-rule parent))
                   (node-child-index? n))))
                ((node-parent parent)
-                (symbol-attributes
+                (psymbol-attributes
                  (list-ref
                   (ast-rule-production (node-ast-rule (node-parent parent)))
                   (node-child-index? parent))))
@@ -1774,9 +1762,9 @@
          detach-inherited-attributes
          (node-children n)))
        ((node-non-terminal? n)
-        (node-attributes-set!
+        (set-node-attributes!
          n
-         (remp
+         (filter-not
           (lambda (att)
             (let ((remove? (attribute-definition-inherited? (attribute-instance-definition att))))
               (when remove?
@@ -1788,7 +1776,7 @@
  ; fragment's evaluator state to the given one.
  (define distribute-evaluator-state
    (lambda (evaluator-state n)
-     (node-evaluator-state-set! n evaluator-state)
+     (set-node-evaluator-state! n evaluator-state)
      (unless (node-terminal? n)
        (for-each
         (lambda (n)
@@ -1855,12 +1843,12 @@
                   (and dc-hit (cdr dc-hit)))))
            (unless dependency-vector
              (set! dependency-vector (vector #f #f #f #f (list) (list) (list)))
-             (attribute-cache-entry-node-dependencies-set!
+             (set-attribute-cache-entry-node-dependencies!
               dependent-cache
               (cons
                (cons influencing-node dependency-vector)
                (attribute-cache-entry-node-dependencies dependent-cache)))
-             (node-cache-influences-set!
+             (set-node-cache-influences!
               influencing-node
               (cons
                (cons dependent-cache dependency-vector)
@@ -1890,12 +1878,12 @@
               (attribute-instance-context
                (attribute-cache-entry-context influencing-cache))))))
        (when (and dependent-cache (not (memq influencing-cache (attribute-cache-entry-cache-dependencies dependent-cache))))
-         (attribute-cache-entry-cache-dependencies-set!
+         (set-attribute-cache-entry-cache-dependencies!
           dependent-cache
           (cons
            influencing-cache
            (attribute-cache-entry-cache-dependencies dependent-cache)))
-         (attribute-cache-entry-cache-influences-set!
+         (set-attribute-cache-entry-cache-influences!
           influencing-cache
           (cons
            dependent-cache
@@ -1908,13 +1896,9 @@
  ; INTERNAL FUNCTION: Given an attribute instance, flush all its cache entries.
  (define flush-attribute-instance
    (lambda (att)
-     (call-with-values
-      (lambda ()
-        (hashtable-entries (attribute-instance-cache att)))
-      (lambda (keys values)
-        (vector-for-each
-         flush-attribute-cache-entry
-         values)))))
+     (for-each
+      flush-attribute-cache-entry
+      (hash-values (attribute-instance-cache att)))))
  
  ; INTERNAL FUNCTION: Given an attribute cache entry, delete it and all depending entries.
  (define flush-attribute-cache-entry
@@ -1923,26 +1907,26 @@
        ; Delete foreign influences:
        (for-each ; For every cache entry I the entry depends on,...
         (lambda (influencing-cache)
-          (attribute-cache-entry-cache-influences-set! ; ...remove the influence edge from I to the entry.
+          (set-attribute-cache-entry-cache-influences! ; ...remove the influence edge from I to the entry.
            influencing-cache
            (remq att-cache (attribute-cache-entry-cache-influences influencing-cache))))
         (attribute-cache-entry-cache-dependencies att-cache))
        (for-each ; For every node N the attribute cache entry depends on...
         (lambda (node-dependency)
-          (node-cache-influences-set!
+          (set-node-cache-influences!
            (car node-dependency)
-           (remp ; ...remove the influence edge from N to the entry.
+           (filter-not ; ...remove the influence edge from N to the entry.
             (lambda (cache-influence)
               (eq? (car cache-influence) att-cache))
             (node-cache-influences (car node-dependency)))))
         (attribute-cache-entry-node-dependencies att-cache))
        ; Delete the attribute cache entry:
-       (hashtable-delete!
+       (hash-remove!
         (attribute-instance-cache (attribute-cache-entry-context att-cache))
         (attribute-cache-entry-arguments att-cache))
-       (attribute-cache-entry-cache-dependencies-set! att-cache (list))
-       (attribute-cache-entry-node-dependencies-set! att-cache (list))
-       (attribute-cache-entry-cache-influences-set! att-cache (list))
+       (set-attribute-cache-entry-cache-dependencies! att-cache (list))
+       (set-attribute-cache-entry-node-dependencies! att-cache (list))
+       (set-attribute-cache-entry-cache-influences! att-cache (list))
        ; Proceed flushing, i.e., for every attribute cache entry D the entry originally influenced,...
        (for-each
         (lambda (dependent-cache)
@@ -1962,17 +1946,17 @@
         (node-cache-influences n*))
        (for-each
         (lambda (att)
-          (vector-for-each
+          (for-each
            (lambda (att-cache)
              (let ((flush-att-cache?
                     (and
                      flush-outgoing?
                      (or
-                      (find
+                      (findf
                        (lambda (dependency)
                          (not (node-inside-of? (car dependency) n)))
                        (attribute-cache-entry-node-dependencies att-cache))
-                      (find
+                      (findf
                        (lambda (influencing-cache)
                          (not (node-inside-of? (attribute-instance-context (attribute-cache-entry-context influencing-cache)) n)))
                        (attribute-cache-entry-cache-dependencies att-cache))))))
@@ -1983,11 +1967,7 @@
                       (unless (node-inside-of? (attribute-instance-context (attribute-cache-entry-context dependent-cache)) n)
                         (flush-attribute-cache-entry dependent-cache)))
                     (attribute-cache-entry-cache-influences att-cache)))))
-           (call-with-values
-            (lambda ()
-              (hashtable-entries (attribute-instance-cache att)))
-            (lambda (key-vector value-vector)
-              value-vector))))
+           (hash-values (attribute-instance-cache att))))
         (node-attributes n*))
        (unless (node-terminal? n*)
          (for-each
@@ -1999,7 +1979,7 @@
      ;;; Before changing the value of the terminal ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state n)) ; ...no attributes are in evaluation and...
        (throw-exception
-        "Cannot change terminal value; "
+        "Cannot change terminal value;"
         "There are attributes in evaluation."))
      (let ((n
             (if (symbol? i)
@@ -2007,7 +1987,7 @@
                 (and (>= i 1) (<= i (length (node-children n))) (list-ref (node-children n) (- i 1))))))
        (unless (and n (node-terminal? n)) ; ...the given context is a terminal.
          (throw-exception
-          "Cannot change terminal value; "
+          "Cannot change terminal value;"
           "The given context does not exist or is no terminal."))
        ;;; Everything is fine. Thus,...
        (let ((old-value (node-children n)))
@@ -2015,7 +1995,7 @@
           (lambda (influence)
             (flush-attribute-cache-entry (car influence)))
           (node-cache-influences n))
-         (node-children-set! n new-value) ; ...rewrite its value and...
+         (set-node-children! n new-value) ; ...rewrite its value and...
          old-value)))) ; ...return its old value.
  
  (define rewrite-refine
@@ -2023,22 +2003,22 @@
      ;;; Before refining the non-terminal node ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state n)) ; ...non of its attributes are in evaluation,...
        (throw-exception
-        "Cannot refine node; "
+        "Cannot refine node;"
         "There are attributes in evaluation."))
      (when (or (node-list-node? n) (node-bud-node? n)) ; ...it is not a list or bud node,...
        (throw-exception
-        "Cannot refine node; "
-        "The node is a " (if (node-list-node? n) "list" "bud") " node."))
+        "Cannot refine node;"
+        "The node is a" (if (node-list-node? n) "list" "bud") "node."))
      (let* ((old-rule (node-ast-rule n))
             (new-rule (racr-specification-find-rule (ast-rule-specification old-rule) t)))
        (unless (and new-rule (ast-rule-subtype? new-rule old-rule)) ; ...the given type is a subtype and...
          (throw-exception
-          "Cannot refine node; "
-          t " is not a subtype of " (symbol-name (car (ast-rule-production old-rule))) "."))
+          "Cannot refine node;"
+          t "is not a subtype of" (psymbol-name (car (ast-rule-production old-rule))) "."))
        (let ((additional-children (list-tail (ast-rule-production new-rule) (length (ast-rule-production old-rule)))))
          (unless (satisfies-contexts? c additional-children) ; ...all additional children fit.
            (throw-exception
-            "Cannot refine node; "
+            "Cannot refine node;"
             "The given additional children do not fit."))
          ;;; Everything is fine. Thus,...
          (for-each ; ...flush the influenced attribute cache entries, i.e., all entries influenced by the node's...
@@ -2049,15 +2029,15 @@
              (or
               (and (vector-ref (cdr influence) 2) (not (null? c))) ; ...number of children,...
               (and (vector-ref (cdr influence) 3) (not (eq? old-rule new-rule))) ; ...type,...
-              (find ; ...supertype,...
+              (findf ; ...supertype,...
                (lambda (t2)
                  (not (eq? (ast-rule-subtype? t2 old-rule) (ast-rule-subtype? t2 new-rule))))
                (vector-ref (cdr influence) 4))
-              (find ; ...subtype or...
+              (findf ; ...subtype or...
                (lambda (t2)
                  (not (eq? (ast-rule-subtype? old-rule t2) (ast-rule-subtype? new-rule t2))))
                (vector-ref (cdr influence) 5))
-              (find ; ...defined contexts and...
+              (findf ; ...defined contexts and...
                (lambda (context-name)
                  (let ((old-defines-context? (ast-rule-find-child-context old-rule context-name))
                        (new-defines-context? (ast-rule-find-child-context new-rule context-name)))
@@ -2066,7 +2046,7 @@
            (node-cache-influences n)))
          (for-each ; ...all entries depending on the new children being roots. Afterwards,...
           (lambda (child context)
-            (when (symbol-non-terminal? context)
+            (when (psymbol-non-terminal? context)
               (for-each
                (lambda (influence)
                  (flush-attribute-cache-entry (car influence)))
@@ -2076,19 +2056,19 @@
                 (node-cache-influences child)))))
           c
           additional-children)
-         (node-ast-rule-set! n new-rule) ; ...update the node's type,...
+         (set-node-ast-rule! n new-rule) ; ...update the node's type,...
          (update-synthesized-attribution n) ; ...synthesized attribution,...
-         (node-children-set! ; ...insert the new children and...
+         (set-node-children! ; ...insert the new children and...
           n
           (append
            (node-children n)
            (map
             (lambda (child context)
               (let ((child
-                     (if (symbol-non-terminal? context)
+                     (if (psymbol-non-terminal? context)
                          child
                          (make-node 'terminal n child))))
-                (node-parent-set! child n)
+                (set-node-parent! child n)
                 (distribute-evaluator-state (node-evaluator-state n) child) ; ...update their evaluator state and...
                 child))
             c
@@ -2102,23 +2082,23 @@
      ;;; Before abstracting the node ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state n)) ; ...no attributes are in evaluation,...
        (throw-exception
-        "Cannot abstract node; "
+        "Cannot abstract node;"
         "There are attributes in evaluation."))
      (when (or (node-list-node? n) (node-bud-node? n)) ; ...the node is not a list or bud node,...
        (throw-exception
-        "Cannot abstract node; "
-        "The node is a " (if (node-list-node? n) "list" "bud") " node."))
+        "Cannot abstract node;"
+        "The node is a" (if (node-list-node? n) "list" "bud") "node."))
      (let* ((old-rule (node-ast-rule n))
             (new-rule (racr-specification-find-rule (ast-rule-specification old-rule) t)))
        (unless (and new-rule (ast-rule-subtype? old-rule new-rule)) ; ...the new type is a supertype and...
          (throw-exception
-          "Cannot abstract node; "
-          t " is not a supertype of " (symbol-name (car (ast-rule-production old-rule))) "."))
+          "Cannot abstract node;"
+          t "is not a supertype of" (psymbol-name (car (ast-rule-production old-rule))) "."))
        ; ...permitted in the context in which the node is:
        (unless (or (not (node-parent n)) (valid-replacement-candidate? n (create-ast-mockup new-rule)))
          (throw-exception
-          "Cannot abstract node; "
-          "Abstraction to type " t " not permitted by context."))
+          "Cannot abstract node;"
+          "Abstraction to type" t "not permitted by context."))
        ;;; Everything is fine. Thus,...
        (let* ((num-new-children (length (cdr (ast-rule-production new-rule))))
               (children-to-remove (list-tail (node-children n) num-new-children)))
@@ -2130,15 +2110,15 @@
              (or
               (and (vector-ref (cdr influence) 2) (not (null? children-to-remove))) ; ...number of children,...
               (and (vector-ref (cdr influence) 3) (not (eq? old-rule new-rule))) ; ...type...
-              (find ; ...supertype,...
+              (findf ; ...supertype,...
                (lambda (t2)
                  (not (eq? (ast-rule-subtype? t2 old-rule) (ast-rule-subtype? t2 new-rule))))
                (vector-ref (cdr influence) 4))
-              (find ; ...subtype or...
+              (findf ; ...subtype or...
                (lambda (t2)
                  (not (eq? (ast-rule-subtype? old-rule t2) (ast-rule-subtype? new-rule t2))))
                (vector-ref (cdr influence) 5))
-              (find ; ...defined contexts and...
+              (findf ; ...defined contexts and...
                (lambda (context-name)
                  (let ((old-defines-context? (ast-rule-find-child-context old-rule context-name))
                        (new-defines-context? (ast-rule-find-child-context new-rule context-name)))
@@ -2149,19 +2129,19 @@
           (lambda (child-to-remove)
             (flush-inter-fragment-dependent-attribute-cache-entries child-to-remove #t))
           children-to-remove)
-         (node-ast-rule-set! n new-rule) ; ...update the node's type and its...
+         (set-node-ast-rule! n new-rule) ; ...update the node's type and its...
          (update-synthesized-attribution n) ; ...synthesized (because of possibly less) and...
          (update-inherited-attribution n) ; ...inherited (because of unshadowed) attributes. Further,...
          (for-each ; ...for every child to remove,...
           (lambda (child)
             (detach-inherited-attributes child) ; ...delete its inherited attributes,...
-            (node-parent-set! child #f) ; ...detach it from the AST and...
+            (set-node-parent! child #f) ; ...detach it from the AST and...
             (distribute-evaluator-state (make-evaluator-state) child)) ; ...update its evaluator state. Then,...
           children-to-remove)
          (unless (null? children-to-remove)
            (if (> num-new-children 0)
-               (set-cdr! (list-tail (node-children n) (- num-new-children 1)) (list))
-               (node-children-set! n (list))))
+               (set-node-children! n (take (node-children n) num-new-children))
+               (set-node-children! n (list))))
          (for-each ; ...update the inherited attribution of all remaining children. Finally,...
           update-inherited-attribution
           (node-children n))
@@ -2174,15 +2154,15 @@
      ;;; Before adding the element ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state l)) ; ...no attributes of the list are in evaluation,...
        (throw-exception
-        "Cannot add list element; "
+        "Cannot add list element;"
         "There are attributes in evaluation."))
      (unless (node-list-node? l) ; ...indeed a list is given as context and...
        (throw-exception
-        "Cannot add list element; "
+        "Cannot add list element;"
         "The given context is no list-node."))
      (unless (valid-list-element-candidate? l e) ; ...the new element fits.
        (throw-exception
-        "Cannot add list element; "
+        "Cannot add list element;"
         "The new element does not fit."))
      ;;; When all rewrite constraints are satisfied,...
      (for-each ; ...flush all attribute cache entries influenced by the list-node's number of children and...
@@ -2199,8 +2179,8 @@
        (lambda (influence)
          (vector-ref (cdr influence) 1))
        (node-cache-influences e)))
-     (node-children-set! l (append (node-children l) (list e))) ; ...add the new element,...
-     (node-parent-set! e l)
+     (set-node-children! l (append (node-children l) (list e))) ; ...add the new element,...
+     (set-node-parent! e l)
      (distribute-evaluator-state (node-evaluator-state l) e) ; ...initialize its evaluator state and...
      (when (node-parent l)
        (update-inherited-attribution e)))) ; ...any inherited attributes defined for its new context.
@@ -2210,11 +2190,11 @@
      ;;; Before replacing the subtree ensure, that no attributes of the old fragment are in evaluation and...
      (when (evaluator-state-in-evaluation? (node-evaluator-state old-fragment))
        (throw-exception
-        "Cannot replace subtree; "
+        "Cannot replace subtree;"
         "There are attributes in evaluation."))
      (unless (valid-replacement-candidate? old-fragment new-fragment) ; ...the new fragment fits in its context.
        (throw-exception
-        "Cannot replace subtree; "
+        "Cannot replace subtree;"
         "The replacement does not fit."))
      ;;; When all rewrite constraints are satisfied,...
      (detach-inherited-attributes old-fragment) ; ...delete the old fragment's inherited attribution. Then,...
@@ -2229,11 +2209,13 @@
        (node-cache-influences new-fragment)))
      (distribute-evaluator-state (node-evaluator-state old-fragment) new-fragment) ; ...update both fragments' evaluator state,...
      (distribute-evaluator-state (make-evaluator-state) old-fragment)
-     (set-car! ; ...replace the old fragment by the new one and...
-      (list-tail (node-children (node-parent old-fragment)) (- (node-child-index? old-fragment) 1))
-      new-fragment)
-     (node-parent-set! new-fragment (node-parent old-fragment))
-     (node-parent-set! old-fragment #f)
+     ; ...replace the old fragment by the new one and...
+     (set-node-children! (node-parent old-fragment)
+                         (list-set (node-children (node-parent old-fragment))
+                                   (- (node-child-index? old-fragment) 1)
+                                   new-fragment))
+     (set-node-parent! new-fragment (node-parent old-fragment))
+     (set-node-parent! old-fragment #f)
      (update-inherited-attribution new-fragment) ; ...update the new fragment's inherited attribution. Finally,...
      old-fragment)) ; ...return the removed old fragment.
  
@@ -2242,19 +2224,19 @@
      ;;; Before inserting the new element ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state l)) ; ...no attributes of the list are in evaluation,...
        (throw-exception
-        "Cannot insert list element; "
+        "Cannot insert list element;"
         "There are attributes in evaluation."))
      (unless (node-list-node? l) ; ...indeed a list is given as context,...
        (throw-exception
-        "Cannot insert list element; "
+        "Cannot insert list element;"
         "The given context is no list-node."))
      (when (or (< i 1) (> i (+ (length (node-children l)) 1))) ; ...the list has enough elements and...
        (throw-exception
-        "Cannot insert list element; "
+        "Cannot insert list element;"
         "The given index is out of range."))
      (unless (valid-list-element-candidate? l e) ; ...the new element fits.
        (throw-exception
-        "Cannot add list element; "
+        "Cannot add list element;"
         "The new element does not fit."))
      ;;; When all rewrite constraints are satisfied...
      (for-each ; ...flush all attribute cache entries influenced by the list's number of children. Further,...
@@ -2278,14 +2260,15 @@
        (node-cache-influences e)))
      (cond ; ...insert the new element,...
        ((null? (node-children l))
-        (node-children-set! l (list e)))
+        (set-node-children! l (list e)))
        ((= (length (node-children l)) (- i 1))
-        (node-children-set! l (append (node-children l) (list e))))
+        (set-node-children! l (append (node-children l) (list e))))
        (else
-        (let ((insert-head (list-tail (node-children l) (- i 1))))
-          (set-cdr! insert-head (cons (car insert-head) (cdr insert-head)))
-          (set-car! insert-head e))))
-     (node-parent-set! e l)
+        (set-node-children! l (append
+                               (take (node-children l) (- i 1))
+                               (list e)
+                               (list-tail (node-children l) (- i 1))))))
+     (set-node-parent! e l)
      (distribute-evaluator-state (node-evaluator-state l) e) ; ...initialize its evaluator state and...
      (when (node-parent l)
        (update-inherited-attribution e)))) ; ...any inherited attributes defined for its new context.
@@ -2295,11 +2278,11 @@
      ;;; Before deleting the element ensure, that...
      (when (evaluator-state-in-evaluation? (node-evaluator-state n)) ; ...no attributes are in evaluation and...
        (throw-exception
-        "Cannot delete list element; "
+        "Cannot delete list element;"
         "There are attributes in evaluation."))
      (unless (and (node-parent n) (node-list-node? (node-parent n))) ; ...the given node is element of a list.
        (throw-exception
-        "Cannot delete list element; "
+        "Cannot delete list element;"
         "The given node is not element of a list."))
      ;;; When all rewrite constraints are satisfied, flush all attribute cache entries influenced by...
      (for-each ; ...the number of children of the list node the element is part of. Further,...
@@ -2316,8 +2299,8 @@
       (lambda (successor)
         (flush-inter-fragment-dependent-attribute-cache-entries successor #f))
       (list-tail (node-children (node-parent n)) (node-child-index? n)))
-     (node-children-set! (node-parent n) (remq n (node-children (node-parent n)))) ; ...remove the element from the list,...
-     (node-parent-set! n #f)
+     (set-node-children! (node-parent n) (remq n (node-children (node-parent n)))) ; ...remove the element from the list,...
+     (set-node-parent! n #f)
      (distribute-evaluator-state (make-evaluator-state) n) ; ...reset its evaluator state and...
      n)) ; ...return it.
  
@@ -2339,22 +2322,22 @@
             (and
              (not (node-terminal? n))
              (or
-              (find (lambda (transformer) (transformer n)) transformers)
-              (find find-and-apply (node-children n))))))
+              (findf (lambda (transformer) (transformer n)) transformers)
+              (findf find-and-apply (node-children n))))))
          ((bottom-up)
           (lambda (n)
             (and
              (not (node-terminal? n))
              (or
-              (find find-and-apply (node-children n))
-              (find (lambda (transformer) (transformer n)) transformers)))))
+              (findf find-and-apply (node-children n))
+              (findf (lambda (transformer) (transformer n)) transformers)))))
          (else (throw-exception
-                "Cannot perform rewrites; "
-                "Unknown " strategy " strategy."))))
+                "Cannot perform rewrites;"
+                "Unknown" strategy "strategy."))))
      (let loop ()
        (when (root-deleted/inserted?)
          (throw-exception
-          "Cannot perform rewrites; "
+          "Cannot perform rewrites;"
           "A given transformer manipulated the root of the AST."))
        (let ((match (find-and-apply root)))
          (if match
@@ -2366,15 +2349,15 @@
      (let ((ast-rule (specification->find-ast-rule spec node-type)))
        (unless ast-rule
          (throw-exception
-          "Cannot construct transformer; "
-          "Undefined " node-type " node type."))
-       (unless (find
+          "Cannot construct transformer;"
+          "Undefined" node-type "node type."))
+       (unless (findf
                 (lambda (attribute-definition)
                   (eq? (attribute->name attribute-definition) pattern-attribute))
                 (symbol->attributes (car (ast-rule->production ast-rule))))
          (throw-exception
-          "Cannot construct transformer; "
-          "No " pattern-attribute " attribute defined in the context of " node-type " nodes.")))
+          "Cannot construct transformer;"
+          "No" pattern-attribute "attribute defined in the context of" node-type "nodes.")))
      (lambda (n)
        (when (and (not (or (ast-bud-node? n) (ast-list-node? n))) (ast-subtype? n node-type))
          (let ((match? (apply att-value pattern-attribute n pattern-arguments)))
@@ -2401,7 +2384,7 @@
                   (or (not type) (symbol? type))
                   (or (not binding) (symbol? binding)))
            (throw-exception
-            "Invalid pattern definition; "
+            "Invalid pattern definition;"
             "Wrong argument type (context, type or binding of fragment)."))
          (create-ast
           pattern-language
@@ -2419,7 +2402,7 @@
        (lambda (name source target)
          (unless (and (symbol? name) (symbol? source) (symbol? target))
            (throw-exception
-            "Invalid pattern definition; "
+            "Invalid pattern definition;"
             "Wrong argument type (name, source and target of references must be symbols)."))
          (create-ast pattern-language 'Ref (list name source target))))
      (let ((ast
@@ -2440,18 +2423,18 @@
             (if source?
                 (rewrite-terminal 'source ref source?)
                 (throw-exception
-                 "Invalid pattern definition; "
-                 "Undefined reference source " (ast-child 'source ref) "."))
+                 "Invalid pattern definition;"
+                 "Undefined reference source" (ast-child 'source ref) "."))
             (if target?
                 (rewrite-terminal 'target ref target?)
                 (throw-exception
-                 "Invalid pattern definition; "
-                 "Undefined reference target " (ast-child 'target ref) "."))))
+                 "Invalid pattern definition;"
+                 "Undefined reference target" (ast-child 'target ref) "."))))
         (ast-children (ast-child 'Ref* ast)))
        ; Ensure well-formedness of the pattern (valid distinguished node, reachability, typing, unique node naming):
        (unless (att-value 'well-formed? ast)
          (throw-exception
-          "Invalid pattern definition; "
+          "Invalid pattern definition;"
           "The pattern is not well-formed."))
        ; Every thing is fine. Thus, add a respective matching attribute to the given specification: 
        (specify-attribute
@@ -2627,15 +2610,15 @@
        bindings
        (Pattern
         (lambda (n)
-          (fold-left
-           (lambda (result n)
+          (foldl
+           (lambda (n result)
              (append result (att-value 'bindings n)))
            (list)
            (ast-children (ast-child 'Node* n)))))
        (Node
         (lambda (n)
-          (fold-left
-           (lambda (result n)
+          (foldl
+           (lambda (n result)
              (append result (att-value 'bindings n)))
            (if (ast-child 'binding n) (list n) (list))
            (ast-children (ast-child 'Node* n))))))
@@ -2644,15 +2627,15 @@
        nodes-count
        (Pattern
         (lambda (n)
-          (fold-left
-           (lambda (result n)
+          (foldl
+           (lambda (n result)
              (+ result (att-value 'nodes-count n)))
            0
            (ast-children (ast-child 'Node* n)))))
        (Node
         (lambda (n)
-          (fold-left
-           (lambda (result n)
+          (foldl
+           (lambda (n result)
              (+ result (att-value 'nodes-count n)))
            1
            (ast-children (ast-child 'Node* n))))))
@@ -2693,10 +2676,10 @@
        (Pattern
         (lambda (n)
           (let ((list-types
-                 (fold-left
-                  (lambda (result ast-rule)
-                    (fold-left
-                     (lambda (result symbol)
+                 (foldl
+                  (lambda (ast-rule result)
+                    (foldl
+                     (lambda (symbol result)
                        (if (and (symbol->kleene? symbol) (not (memq (symbol->non-terminal? symbol) result)))
                            (cons (symbol->non-terminal? symbol) result)
                            result))
@@ -2707,7 +2690,7 @@
             (filter
              (lambda (type1)
                (not
-                (find
+                (findf
                  (lambda (type2)
                    (and
                     (not (eq? type1 type2))
@@ -2756,7 +2739,7 @@
                 (ast-find-child
                  (lambda (i child)
                    (not
-                    (find
+                    (findf
                      (lambda (child-type)
                        (att-value 'valid-type? child child-type #f))
                      (att-value 'most-concrete-types n type))))
@@ -2771,7 +2754,7 @@
                              ((symbol->kleene? context?) (list (symbol->non-terminal? context?)))
                              (else (att-value 'most-concrete-types n (symbol->non-terminal? context?))))))
                      (not
-                      (find
+                      (findf
                        (lambda (type)
                          (att-value 'valid-type? child type (symbol->kleene? context?)))
                        context-types?))))
@@ -2782,11 +2765,11 @@
        ((Pattern Node*)
         (lambda (n)
           (or
-           (find
+           (findf
             (lambda (type)
               (att-value 'valid-type? n type #f))
             (att-value 'most-concrete-types n))
-           (find
+           (findf
             (lambda (type)
               (att-value 'valid-type? n type #t))
             (att-value 'most-general-list-types n))))))
@@ -2823,10 +2806,10 @@
                (length (att-value 'fragment-root-path (ast-child 'source ref)))
                (length (att-value 'fragment-root-path (ast-child 'target ref))))))
           (reverse
-           (fold-left ; Filter for each target the cheapest inter fragment reference:
-            (lambda (result ref)
+           (foldl ; Filter for each target the cheapest inter fragment reference:
+            (lambda (ref result)
               (if
-               (memp
+               (memf
                 (lambda (weighted-ref)
                   (eq?
                    (att-value 'fragment-root (ast-child 'target ref))
@@ -2835,15 +2818,15 @@
                result
                (cons (cons ref (walk-costs ref)) result)))
             (list)
-            (list-sort ; Sort the inter fragment references according to their costs:
-             (lambda (ref1 ref2)
-               (< (walk-costs ref1) (walk-costs ref2)))
+            (sort ; Sort the inter fragment references according to their costs:
              (filter ; Find all inter fragment references of the fragment:
               (lambda (ref)
                 (and
                  (eq? (att-value 'fragment-root (ast-child 'source ref)) n)
                  (att-value 'inter-fragment-reference? ref)))
-              (att-value 'references n))))))))
+              (att-value 'references n))
+             (lambda (ref1 ref2)
+               (< (walk-costs ref1) (walk-costs ref2)))))))))
       
       (ag-rule ; List of references best suited to reach other fragments from the distinguished node.
        fragment-walk
@@ -2860,10 +2843,10 @@
                          (att-value 'fragment-root (ast-child 'dnode n))
                          (ast-children (ast-child 'Node* n)))))
               (let ((next-walk? ; Find the next inter fragment reference to follow if there is any,...
-                     (fold-left ; ...i.e., for every already walked inter fragment reference R,...
-                      (lambda (best-next-walk performed-walk)
+                     (foldl ; ...i.e., for every already walked inter fragment reference R,...
+                      (lambda (performed-walk best-next-walk)
                         (let ((possible-next-walk ; ...find the best walk reaching a new fragment from its target....
-                               (find
+                               (findf
                                 (lambda (weighted-ref)
                                   (memq
                                    (att-value 'fragment-root (ast-child 'target (car weighted-ref)))
@@ -2941,7 +2924,7 @@
            (let loop ((children (ast-children (ast-child 'Node* n)))) ; Contexts must be unique:
              (cond
                ((null? children) #t)
-               ((find
+               ((findf
                  (lambda (child)
                    (eqv? (ast-child 'context (car children)) (ast-child 'context child)))
                  (cdr children))
@@ -2977,7 +2960,7 @@
            (att-value
             'pmm-code:match-fragment
             (ast-child 'dnode n)
-            (fold-right
+            (foldr
              (lambda (reference result)
                (pmmi-load-node
                 (pmmi-traverse-reference
@@ -2995,7 +2978,7 @@
        pmm-code:match-fragment
        (Node
         (lambda (n continuation-code)
-          (fold-right
+          (foldr
            (lambda (context result)
              (if (integer? context)
                  (pmmi-ensure-context-by-index result context)
@@ -3009,7 +2992,7 @@
         (lambda (n continuation-code)
           (let ((store-instruction
                  (pmmi-store-node
-                  (fold-right
+                  (foldr
                    (lambda (child result)
                      (pmmi-load-node
                       (if (integer? (ast-child 'context child))
@@ -3034,8 +3017,8 @@
        pmm-code:check-references
        (Pattern
         (lambda (n continuation-code)
-          (fold-left
-           (lambda (result reference)
+          (foldl
+           (lambda (reference result)
              (pmmi-load-node
               (pmmi-traverse-reference
                (pmmi-ensure-node
@@ -3056,4 +3039,4 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  
  (when (= (specification->phase pattern-language) 1)
-   (load-pattern-language)))
+   (load-pattern-language))

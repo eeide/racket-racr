@@ -2,18 +2,21 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 ; Given an AST node, return a list of the buds within its spaned tree.
 (define collect-all-buds
   (lambda (n)
     (if (ast-bud-node? n)
         (list n)
-        (fold-left
-         (lambda (result child)
+        (foldl
+         (lambda (child result)
            (if (ast-node? child)
                (append result (collect-all-buds child))
                result))
@@ -24,8 +27,8 @@
 (define assert-buds
   (lambda (n . expected-buds)
     (let ((actual-buds (collect-all-buds n)))
-      (assert (= (length actual-buds) (length expected-buds)))
-      (assert
+      (check-true (= (length actual-buds) (length expected-buds)))
+      (check-true
        (null?
         (filter
          (lambda (bud)

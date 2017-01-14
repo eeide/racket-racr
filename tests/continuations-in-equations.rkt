@@ -2,10 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core))
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define initialize-tests
   (lambda ()
@@ -52,14 +55,14 @@
 (define run-tests
   (lambda ()
     (let ((ast (initialize-tests)))
-      (assert (= (att-value 'non-local ast #f) 2))
-      (assert (=
+      (check-true (= (att-value 'non-local ast #f) 2))
+      (check-true (=
                (call/cc
                 (lambda (c)
                   (att-value 'non-local ast c)))
                10))
-      (assert (= (att-value 'non-local ast #f) 2))
-      (assert (=
+      (check-true (= (att-value 'non-local ast #f) 2))
+      (check-true (=
                (+
                 (call/cc
                  (lambda (c)

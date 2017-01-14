@@ -2,10 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define ast-spec
   (lambda ()
@@ -32,15 +35,15 @@
       ((ast-bud-node? n)
        (list))
       ((ast-list-node? n)
-       (fold-left
-        (lambda (result n)
+       (foldl
+        (lambda (n result)
           (append result (collect-nodes-of-subtype n type)))
         (list)
         (ast-children n)))
       (else
        (let ((children
-              (fold-left
-               (lambda (result non-terminal? child)
+              (foldl
+               (lambda (non-terminal? child result)
                  (if non-terminal?
                      (append result (collect-nodes-of-subtype child type))
                      result))
@@ -61,7 +64,8 @@
   (lambda ()
     ;;; Distinguished node and redeclaration errors:
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Undefined distinguished node
       (ast-spec)
       'pattern
@@ -70,9 +74,10 @@
          #f
          ()))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Distinguished node has no type
       (ast-spec)
       'pattern
@@ -81,9 +86,10 @@
          D
          ()))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Distinguished node is list-node
       (ast-spec)
       'pattern
@@ -92,9 +98,10 @@
          D
          ()))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Bounded name redeclaration
       (ast-spec)
       'pattern
@@ -104,11 +111,12 @@
          ((1 A D ())
           (2 A J ()))))
       '()
-      #f))
+      #f)))
     
     ;;; Reachability errors:
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern
       (ast-spec)
       'pattern
@@ -132,11 +140,12 @@
         (ref F1 F2)
         (ref F2 F3)
         (ref F4 F2))
-      #f))
+      #f)))
     
     ;;; Type errors:
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Undefined node type
       (ast-spec)
       'pattern
@@ -145,9 +154,10 @@
          D
          ((A1 Undefined #f ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: User defined nested lists
       (ast-spec)
       'pattern
@@ -159,9 +169,10 @@
          R
          ((1 * #f ()))))
       '((ref D R))
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Context defined nested lists
       (ast-spec)
       'pattern
@@ -176,9 +187,10 @@
            #f
            ((1 #f #f ()))))))
       '((ref D R))
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Mixed list/non-list node
       (ast-spec)
       'pattern
@@ -188,9 +200,10 @@
          ((1 A D ())
           (A1 #f #f ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Undefined context
       (ast-spec)
       'pattern
@@ -199,9 +212,10 @@
          D
          ((Undefined #f #f ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: No unique non-list contexts
       (ast-spec)
       'pattern
@@ -211,9 +225,10 @@
          ((A1 #f #f ())
           (A1 #f #f ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: No unique list contexts
       (ast-spec)
       'pattern
@@ -223,9 +238,10 @@
          ((1 A D ())
           (1 #f #f ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Unsatisfyable context type
       (ast-spec)
       'pattern
@@ -237,9 +253,10 @@
            #f
            ()))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Unsatisfyable pattern
       (ast-spec)
       'pattern
@@ -257,9 +274,10 @@
                #f
                ()))))))))
       '()
-      #f))
+      #f)))
     
-    (assert-exception
+    (check-exn exn:fail?
+     (lambda ()
      (specify-pattern ; ERROR: Unsatisfyable pattern
       (ast-spec)
       'pattern
@@ -268,7 +286,7 @@
          #f
          ((1 Z D ()))))
       '()
-      #f))))
+      #f)))))
 
 (define correct-pattern-tests
   (lambda ()
@@ -386,13 +404,13 @@
                 (create-ast-bud)
                 (create-ast-bud)))
               (create-ast-list (list)))))))
-      (assert (= (length (filter-matches ast 'pattern1 'A)) 8))
-      (assert (= (length (att-value 'pattern1 ast)) 1))
-      (assert (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
-      (assert (= (length (filter-matches ast 'pattern2 'B)) 2))
-      (assert (null? (filter-matches ast 'pattern3 'C)))
-      (assert (null? (filter-matches ast 'pattern4 'C)))
-      (assert (null? (filter-matches ast 'pattern5 'A)))
+      (check-true (= (length (filter-matches ast 'pattern1 'A)) 8))
+      (check-true (= (length (att-value 'pattern1 ast)) 1))
+      (check-true (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
+      (check-true (= (length (filter-matches ast 'pattern2 'B)) 2))
+      (check-true (null? (filter-matches ast 'pattern3 'C)))
+      (check-true (null? (filter-matches ast 'pattern4 'C)))
+      (check-true (null? (filter-matches ast 'pattern5 'A)))
       
       (rewrite-terminal
        1
@@ -402,37 +420,37 @@
        1
        (ast-child 'A1 ast)
        (ast-child 1 (ast-child 'A2 (ast-child 'A1 ast))))
-      (assert (= (length (filter-matches ast 'pattern1 'A)) 8))
-      (assert (= (length (att-value 'pattern1 ast)) 1))
-      (assert (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
-      (assert (= (length (filter-matches ast 'pattern2 'B)) 2))
-      (assert (= (length (filter-matches ast 'pattern3 'C)) 1))
-      (assert
+      (check-true (= (length (filter-matches ast 'pattern1 'A)) 8))
+      (check-true (= (length (att-value 'pattern1 ast)) 1))
+      (check-true (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
+      (check-true (= (length (filter-matches ast 'pattern2 'B)) 2))
+      (check-true (= (length (filter-matches ast 'pattern3 'C)) 1))
+      (check-true
        (eq?
         (cdr (assq 'R2t (att-value 'pattern3 (car (filter-matches ast 'pattern3 'C)))))
         (ast-child 1 (ast-child 'A2 (ast-child 'A1 ast)))))
-      (assert (null? (filter-matches ast 'pattern4 'C)))
-      (assert (= (length (filter-matches ast 'pattern5 'A)) 2))
+      (check-true (null? (filter-matches ast 'pattern4 'C)))
+      (check-true (= (length (filter-matches ast 'pattern5 'A)) 2))
       
       (rewrite-terminal
        1
        (ast-child 'A1 ast)
        (ast-child 'A1 (ast-child 'A1 ast)))
-      (assert (= (length (filter-matches ast 'pattern1 'A)) 8))
-      (assert (= (length (att-value 'pattern1 ast)) 1))
-      (assert (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
-      (assert (= (length (filter-matches ast 'pattern2 'B)) 2))
-      (assert (= (length (filter-matches ast 'pattern3 'C)) 1))
-      (assert
+      (check-true (= (length (filter-matches ast 'pattern1 'A)) 8))
+      (check-true (= (length (att-value 'pattern1 ast)) 1))
+      (check-true (eq? (cdr (assq 'D (att-value 'pattern1 ast))) ast))
+      (check-true (= (length (filter-matches ast 'pattern2 'B)) 2))
+      (check-true (= (length (filter-matches ast 'pattern3 'C)) 1))
+      (check-true
        (eq?
         (cdr (assq 'R2t (att-value 'pattern3 (car (filter-matches ast 'pattern3 'C)))))
         (ast-child 'A1 (ast-child 'A1 ast))))
-      (assert (= (length (filter-matches ast 'pattern4 'C)) 1))
-      (assert
+      (check-true (= (length (filter-matches ast 'pattern4 'C)) 1))
+      (check-true
        (eq?
         (cdr (assq 'R2t (att-value 'pattern3 (car (filter-matches ast 'pattern4 'C)))))
         (ast-child 'A1 (ast-child 'A1 ast))))
-      (assert (= (length (filter-matches ast 'pattern5 'A)) 2)))))
+      (check-true (= (length (filter-matches ast 'pattern5 'A)) 2)))))
 
 (define run-tests
   (lambda ()

@@ -2,9 +2,12 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
-(import (rnrs) (racr core) (racr testing))
+#lang racket
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define initialize-basic-tests
   (lambda (cached?)
@@ -66,22 +69,22 @@
 (define run-tests
   (lambda ()
     (let ((ast (initialize-basic-tests #f)))
-      (assert (equal? (att-value 'circular ast) (cons 10 10)))
-      (assert (equal? (att-value 'circular ast) (cons 10 21)))
-      (assert (= 1 (att-value 'non-circular ast)))
-      (assert (= 2 (att-value 'non-circular ast)))
-      (assert (equal? (att-value 'circular ast) (cons 10 32)))
-      (assert (equal? (att-value 'circular ast) (cons 10 43)))
-      (assert-exception racr-exception? (att-value 'cycle-error ast)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 10)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 21)))
+      (check-true (= 1 (att-value 'non-circular ast)))
+      (check-true (= 2 (att-value 'non-circular ast)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 32)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 43)))
+      (check-exn exn:fail? (lambda () (att-value 'cycle-error ast))))
     
     (let ((ast (initialize-basic-tests #t)))
-      (assert (equal? (att-value 'circular ast) (cons 10 10)))
-      (assert (equal? (att-value 'circular ast) (cons 10 10)))
-      (assert (= 1 (att-value 'non-circular ast)))
-      (assert (= 1 (att-value 'non-circular ast)))
-      (assert (equal? (att-value 'circular ast) (cons 10 10)))
-      (assert (equal? (att-value 'circular ast) (cons 10 10)))
-      (assert-exception racr-exception? (att-value 'cycle-error ast)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 10)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 10)))
+      (check-true (= 1 (att-value 'non-circular ast)))
+      (check-true (= 1 (att-value 'non-circular ast)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 10)))
+      (check-true (equal? (att-value 'circular ast) (cons 10 10)))
+      (check-exn exn:fail? (lambda () (att-value 'cycle-error ast))))
     
     (letrec ((ast-cached (initialize-fibonacci-numbers #t))
              (ast-not-cached (initialize-fibonacci-numbers #f))
@@ -90,8 +93,8 @@
                 (if (< num 2)
                     num
                     (+ (fibonacci-naive (- num 1)) (fibonacci-naive (- num 2)))))))
-      (assert (= (att-value 'fibonacci ast-not-cached 10) (fibonacci-naive 10)))
-      (assert (= (att-value 'fibonacci ast-cached 10) (att-value 'fibonacci ast-not-cached 10)))
+      (check-true (= (att-value 'fibonacci ast-not-cached 10) (fibonacci-naive 10)))
+      (check-true (= (att-value 'fibonacci ast-cached 10) (att-value 'fibonacci ast-not-cached 10)))
       ;(display "Compute Fibonacci Number for n=5000; If it takes a long time, attribute caching is not working:\n")
       ;(display (att-value 'fibonacci ast-cached 5000))
       ;(display "\nFinished computing Fibonacci Number for n=5000.\n")

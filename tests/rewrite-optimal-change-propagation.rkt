@@ -2,9 +2,12 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
-(import (rnrs) (racr core))
+#lang racket
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define initialize-ast
   (lambda (cached?)
@@ -35,30 +38,30 @@
   (lambda ()
     ; Not cached:
     (let ((ast (initialize-ast #f))) ; A before B
-      (assert (att-value 'A ast))
-      (assert (att-value 'B ast))
+      (check-true (att-value 'A ast))
+      (check-true (att-value 'B ast))
       (rewrite-terminal 'v ast #f)
-      (assert (not (att-value 'A ast)))
-      (assert (not (att-value 'B ast))))
+      (check-true (not (att-value 'A ast)))
+      (check-true (not (att-value 'B ast))))
     (let ((ast (initialize-ast #f))) ; B before A
-      (assert (att-value 'B ast))
-      (assert (att-value 'A ast))
+      (check-true (att-value 'B ast))
+      (check-true (att-value 'A ast))
       (rewrite-terminal 'v ast #f)
-      (assert (not (att-value 'B ast)))
-      (assert (not (att-value 'A ast))))
+      (check-true (not (att-value 'B ast)))
+      (check-true (not (att-value 'A ast))))
     
     ; Cached:
     (let ((ast (initialize-ast #t))) ; A before B
-      (assert (att-value 'A ast))
-      (assert (att-value 'B ast))
+      (check-true (att-value 'A ast))
+      (check-true (att-value 'B ast))
       (rewrite-terminal 'v ast #f)
-      (assert (not (att-value 'A ast)))
-      (assert (not (att-value 'B ast))))
+      (check-true (not (att-value 'A ast)))
+      (check-true (not (att-value 'B ast))))
     (let ((ast (initialize-ast #t))) ; B before A
-      (assert (att-value 'B ast))
-      (assert (att-value 'A ast))
+      (check-true (att-value 'B ast))
+      (check-true (att-value 'A ast))
       (rewrite-terminal 'v ast #f)
-      (assert (not (att-value 'B ast)))
-      (assert (not (att-value 'A ast))))))
+      (check-true (not (att-value 'B ast)))
+      (check-true (not (att-value 'A ast))))))
 
 (run-tests)

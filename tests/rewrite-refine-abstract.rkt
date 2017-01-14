@@ -2,10 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define run-tests
   (lambda ()

@@ -2,17 +2,16 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (racr testing)
- (export
+(provide
   print-ast
   include
   assert-exception
   construct-reevaluation-tests)
- (import (rnrs) (racr core))
+(require "core.rkt")
  
  ; Given an AST, an association list L of attribute pretty-printers and an output port, print a
  ; human-readable text representation of the AST on the output port. The elements of the association list
@@ -33,7 +32,7 @@
        (lambda (to-display)
          (display to-display output-port)))
      (unless (ast-node? ast)
-       (assertion-violation 'print-ast "Wrong ast argument; Expected AST node." ast))
+       (raise-argument-error 'print-ast "ast-node?" ast))
      (let loop ((n ast)
                 (ast-depth 0)
                 (context? #f))
@@ -89,7 +88,7 @@
          (let ((p (open-input-file fn)))
            (let f ((x (read p)))
              (if (eof-object? x)
-                 (begin (close-port p) '())
+                 (begin (close-input-port p) '())
                  (cons (datum->syntax k x) (f (read p))))))))
      (syntax-case x ()
        ((_ filename default)
@@ -127,11 +126,11 @@
  ; the case, the test function throws an exception.
  (define construct-reevaluation-tests
    (lambda ()
-     (let* ((reevaluation-table (make-eq-hashtable 50))
+     (let* ((reevaluation-table (make-hasheq))
             (equation-preparator
              (lambda (att-name equation)
                (lambda (n)
-                 (hashtable-update! reevaluation-table att-name (lambda (v) (cons n v)) (list))
+                 (hash-update! reevaluation-table att-name (lambda (v) (cons n v)) (list))
                  (equation n))))
             (reevaluation-tester
              (lambda args
@@ -140,14 +139,14 @@
                    (for-each
                     (lambda (n)
                       (att-value att-name n) ; Force attribute evaluation or cache-hit!
-                      (unless (boolean=? flushed? (and (memq n (hashtable-ref reevaluation-table att-name (list))) #t))
-                        (assertion-violation 'prepare-rewrite-tests:influence-tester "RACR Test API: Rewrite test failed!" (list att-name n)))
+                      (unless (boolean=? flushed? (and (memq n (hash-ref reevaluation-table att-name (list))) #t))
+                        (error 'prepare-rewrite-tests:influence-tester "RACR Test API: Rewrite test failed! ~s" (list att-name n)))
                       (when flushed?
-                        (hashtable-update! reevaluation-table att-name (lambda (v) (remq n v)) (list))))
+                        (hash-update! reevaluation-table att-name (lambda (v) (remq n v)) (list))))
                     (if (list? n) n (list n)))))
                ; Ensure, that the specified influenced attributes are node/attribute name combinations:
                (unless (even? (length args))
-                 (assertion-violation 'prepare-rewrite-tests:influence-tester "RACR Test API: Unexpected number of arguments." args))
+                 (error 'prepare-rewrite-tests:influence-tester "RACR Test API: Unexpected number of arguments. ~s" args))
                ; Ensure, that the specified influenced attributes have been flushed:
                (let loop ((args args))
                  (unless (null? args)
@@ -181,4 +180,4 @@
                            n*))))
                     n))))))
        ; Return the preparation and reevaluation testing functions:
-       (values equation-preparator reevaluation-tester)))))
+       (values equation-preparator reevaluation-tester))))

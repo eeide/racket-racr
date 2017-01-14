@@ -2,10 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require rackunit)
+(require "../racr/core.rkt"
+         "../racr/testing.rkt")
 
 (define run-tests
   (lambda ()
@@ -36,12 +39,12 @@
                 (and (eq? (ast-node-type n) 'B) (rewrite-refine n 'Ba))))))
         
         (apply perform-rewrites ast1 'top-down transformers) ; First the A node is refined, afterwards the B node
-        (assert (eq? (ast-node-type (ast-child 'A ast1)) 'Aa))
-        (assert (eq? (ast-node-type (ast-child 'B (ast-child 'A ast1))) 'Ba))
+        (check-true (eq? (ast-node-type (ast-child 'A ast1)) 'Aa))
+        (check-true (eq? (ast-node-type (ast-child 'B (ast-child 'A ast1))) 'Ba))
         
         (apply perform-rewrites ast2 'bottom-up transformers) ; First the B node is refined for which reason the A node never is
-        (assert (eq? (ast-node-type (ast-child 'A ast2)) 'A))
-        (assert (eq? (ast-node-type (ast-child 'B (ast-child 'A ast2))) 'Ba))))
+        (check-true (eq? (ast-node-type (ast-child 'A ast2)) 'A))
+        (check-true (eq? (ast-node-type (ast-child 'B (ast-child 'A ast2))) 'Ba))))
     
     (let ((ast
            (with-specification
@@ -53,7 +56,7 @@
             (compile-ast-specifications 'S)
             (compile-ag-specifications)
             (create-ast 'S (list (create-ast 'Aa (list (create-ast 'B (list)))))))))
-      (assert ; Assert, that...
+      (check-not-false ; Assert, that...
        (perform-rewrites ; ...the following rewrites terminate, which...
         ast
         'top-down ; ...is only the case for proper top-down rewriting!
