@@ -2,6 +2,7 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
 ; Specification of the binary to decimal number attribute grammar given in
 ;
@@ -10,9 +11,11 @@
 ;   Theory of Computing Systems, volume 2, number 2, pages 127-145,
 ;                            Springer, 1968
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require rackunit)
+(require "../../racr/core.rkt"
+         "../../racr/testing.rkt")
 
 (define spec (create-specification))
 
@@ -69,7 +72,7 @@
 (define (parse in)
   (define pos 0)
   (define (exception)
-    (raise-continuable (condition (make-message-condition "Syntax Error"))))
+    (error "Syntax Error"))
   (define (p-char) ; #f, when no further character
     (and (< pos (string-length in)) (string-ref in pos)))
   (define (r-char) ; exception, when no further character
@@ -112,35 +115,35 @@
   (parse "001101.101100")
   (parse "110010.010011")
   
-  (assert-exception (parse ""))
-  (assert-exception (parse "."))
-  (assert-exception (parse ".1"))
-  (assert-exception (parse "1."))
-  (assert-exception (parse "1a"))
-  (assert-exception (parse "a1"))
-  (assert-exception (parse "a.1"))
-  (assert-exception (parse "1.a"))
-  (assert-exception (parse "1a.1"))
-  (assert-exception (parse "a1.1"))
-  (assert-exception (parse "1.1a"))
-  (assert-exception (parse "1.a1"))
+  (check-exn exn:fail? (lambda () (parse "")))
+  (check-exn exn:fail? (lambda () (parse ".")))
+  (check-exn exn:fail? (lambda () (parse ".1")))
+  (check-exn exn:fail? (lambda () (parse "1.")))
+  (check-exn exn:fail? (lambda () (parse "1a")))
+  (check-exn exn:fail? (lambda () (parse "a1")))
+  (check-exn exn:fail? (lambda () (parse "a.1")))
+  (check-exn exn:fail? (lambda () (parse "1.a")))
+  (check-exn exn:fail? (lambda () (parse "1a.1")))
+  (check-exn exn:fail? (lambda () (parse "a1.1")))
+  (check-exn exn:fail? (lambda () (parse "1.1a")))
+  (check-exn exn:fail? (lambda () (parse "1.a1")))
   
   ; Test interpreter:
-  (assert (= (bin->dec "0") 0))
-  (assert (= (bin->dec "1") 1))
-  (assert (= (bin->dec "01") 1))
-  (assert (= (bin->dec "10") 2))
-  (assert (= (bin->dec "101") 5))
-  (assert (= (bin->dec "0.0") 0))
-  (assert (= (bin->dec "0.1") 1/2))
-  (assert (= (bin->dec "0.10") 1/2))
-  (assert (= (bin->dec "0.01") 1/4))
-  (assert (= (bin->dec "0.101") 5/8))
-  (assert (= (bin->dec "1.1") 3/2))
-  (assert (= (bin->dec "10.01") 9/4))
-  (assert (= (bin->dec "101.101") 45/8))
-  (assert (= (bin->dec "101.111") 47/8))
-  (assert (= (bin->dec "111.111") 63/8))
-  (assert (= (bin->dec "111.101") 61/8)))
+  (check-true (= (bin->dec "0") 0))
+  (check-true (= (bin->dec "1") 1))
+  (check-true (= (bin->dec "01") 1))
+  (check-true (= (bin->dec "10") 2))
+  (check-true (= (bin->dec "101") 5))
+  (check-true (= (bin->dec "0.0") 0))
+  (check-true (= (bin->dec "0.1") 1/2))
+  (check-true (= (bin->dec "0.10") 1/2))
+  (check-true (= (bin->dec "0.01") 1/4))
+  (check-true (= (bin->dec "0.101") 5/8))
+  (check-true (= (bin->dec "1.1") 3/2))
+  (check-true (= (bin->dec "10.01") 9/4))
+  (check-true (= (bin->dec "101.101") 45/8))
+  (check-true (= (bin->dec "101.111") 47/8))
+  (check-true (= (bin->dec "111.111") 63/8))
+  (check-true (= (bin->dec "111.101") 61/8)))
 
 (run-tests)
