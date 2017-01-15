@@ -2,10 +2,12 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing))
+(require "../../racr/core.rkt"
+         "../../racr/testing.rkt")
 
 (define language               (create-specification))
 
@@ -52,7 +54,7 @@
 (define Real                   (list 'Real))
 (define Error-Type             (list 'Error-Type))
 (define (valid-type! t)
-  (if (memq t (list Integer Real)) t (raise "Unknown type.")))
+  (if (memq t (list Integer Real)) t (error "Unknown type.")))
 
 ;;; Abstract Syntax Tree Scheme:
 
