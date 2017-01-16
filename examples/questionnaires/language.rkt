@@ -2,12 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (questionnaires language)
- (export ql
+(require racket/gui)
+(require "../../racr/core.rkt")
+(provide ql
          Form If ?? ~? ~> ~! ~~
          ->Body ->Expression ->Operands
          ->name ->label ->type ->value ->operator ->* <- index count
@@ -16,11 +17,10 @@
          =dialog-type =dialog-printer =value-printer =widget =render
          Boolean Number String ErrorType && // !=
          load-questionnaire save-questionnaire)
- (import (rnrs) (rnrs eval) (compatibility mlist) (racr core)
-         (prefix (racket base) r:) (racket format) (racket class) (racket gui base))
  
  (define ql                    (create-specification))
- (define ql-env                (environment '(rnrs) '(questionnaires language)))
+ (define-namespace-anchor ql-ns-anchor)
+ (define ql-env                (namespace-anchor->namespace ql-ns-anchor))
  
  ;;; AST accessors:
  
@@ -85,28 +85,28 @@
  (define (Number v)            (number? v))
  (define (String v)            (string? v))
  (define valid-types           (list Boolean Number String))
- (define (type->acceptor t)    (find (lambda (e) (eq? e t)) valid-types))
- (define (value->type v)       (find (lambda (e) (e v)) valid-types))
+ (define (type->acceptor t)    (findf (lambda (e) (eq? e t)) valid-types))
+ (define (value->type v)       (findf (lambda (e) (e v)) valid-types))
  (define (ErrorType)           (list 'ErrorType))
  (define (ErrorValue)          (list 'ErrorValue))
- (define (&& . a)              (for-all (lambda (x) x) a))
- (define (// . a)              (find (lambda (x) x) a))
+ (define (&& . a)              (andmap (lambda (x) x) a))
+ (define (// . a)              (findf (lambda (x) x) a))
  (define (!= . a)
    (or (null? a) (and (not (memq (car a) (cdr a))) (apply != (cdr a)))))
  
  ;;; Exceptions:
  
- (define-condition-type ql-error &non-continuable make-ql-error ql-error?)
+ #;(define-condition-type ql-error &non-continuable make-ql-error ql-error?)
  
  (define (ql-error: . messages)
    (define (object->string o)
-     (call-with-string-output-port (lambda (port) (display o port))))
+     (call-with-output-string (lambda (port) (display o port))))
    (define message
-     (fold-left
-      (lambda (result m)
+     (foldl
+      (lambda (m result)
         (string-append result (if (string? m) m (string-append " [" (object->string m) "] "))))
       "IMPLEMENTATION ERROR: " messages))
-   (raise (condition (make-ql-error) (make-message-condition message))))
+   (raise-user-error 'ql "~s" message))
  
  ;;; Loading and saving:
  
@@ -196,7 +196,7 @@
       (let ((ops (->* (->Operands n))))
         (define (in . l) (memq (->operator n) l))
         (define (ensure-type t l)
-          (for-all (lambda (n) (eq? (=type n) t)) l))
+          (andmap (lambda (n) (eq? (=type n) t)) l))
         (cond
           ((in && // not)
            (if (ensure-type Boolean ops) Boolean ErrorType))
@@ -214,8 +214,8 @@
   
   (ag-rule
    valid? ; Is the form well-formed?
-   (Form             (lambda (n) (for-all =valid? (cdr (->* (->Body n))))))
-   (Group            (lambda (n) (and (=l-valid? n) (for-all =valid? (->* (->Body n))))))
+   (Form             (lambda (n) (andmap =valid? (cdr (->* (->Body n))))))
+   (Group            (lambda (n) (and (=l-valid? n) (andmap =valid? (->* (->Body n))))))
    (Question         =l-valid?))
   
   (ag-rule
@@ -290,8 +290,9 @@
     (lambda (n)
       (or (and (eq? (=type n) ErrorType) ErrorValue)
           (let ((args (map =value (->* (->Operands n)))))
-            (find (lambda (value) (eq? value ErrorValue)) args)
-            (guard (x (error? ErrorValue)) (apply (->operator n) args)))))))
+            (findf (lambda (value) (eq? value ErrorValue)) args)
+            (with-handlers ([exn:fail? (lambda (exn) ErrorValue)])
+              (apply (->operator n) args)))))))
   
   ;;; Graphical user interface:
   
@@ -329,7 +330,7 @@
         ((eq? (=dialog-type n) check-box%) (lambda (v) v))
         ((eq? (=dialog-type n) text-field%)
          (if (eq? (=type n) Number)
-             (lambda (v) (let ((number? (r:string->number v))) (if number? number? v)))
+             (lambda (v) (let ((number? (string->number v))) (if number? number? v)))
              (lambda (v) v)))
         (else (ql-error: "no value-printer for" (=dialog-type n) "implemented"))))))
   
@@ -348,7 +349,7 @@
    
    (Group
     (lambda (n)
-      (new vertical-panel% [parent (=widget (<- n))] [border 5] [style (r:list 'border)])))
+      (new vertical-panel% [parent (=widget (<- n))] [border 5] [style (list 'border)])))
    
    (ComputedQuestion
     (lambda (n)
@@ -373,7 +374,7 @@
     (lambda (n)
       (send (=widget n) begin-container-sequence)
       (let ((shown (filter =shown? (->* (->Body n)))))
-        (send (=widget n) change-children (lambda x (mlist->list (map =widget shown))))
+        (send (=widget n) change-children (lambda x (map =widget shown)))
         (map =render shown))
       (send (send (=widget n) get-parent) show #t)
       (send (=widget n) end-container-sequence)))
@@ -381,7 +382,7 @@
    (Group
     (lambda (n)
       (let ((shown (filter =shown? (->* (->Body n)))))
-        (send (=widget n) change-children (lambda x (mlist->list (map =widget shown))))
+        (send (=widget n) change-children (lambda x (map =widget shown)))
         (map =render shown)))))
   
-  (compile-ag-specifications)))
+  (compile-ag-specifications))
