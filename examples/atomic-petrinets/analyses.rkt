@@ -2,18 +2,18 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (atomic-petrinets analyses)
- (export specify-analyses pn
+(require "../../racr/core.rkt")
+(provide
+         specify-analyses pn
          :AtomicPetrinet :Place :Token :Transition :Arc
          ->Place* ->Transition* ->Token* ->In ->Out
          ->name ->value ->place ->consumers ->* <-
          =places =transitions =in-arcs =out-arcs
          =p-lookup =t-lookup =in-lookup =out-lookup =place =valid? =enabled? =executor)
- (import (rnrs) (rnrs mutable-pairs) (racr core))
  
  (define pn                   (create-specification))
  
@@ -35,10 +35,10 @@
  (define (=transitions n)     (att-value 'transitions n))
  (define (=in-arcs n)         (att-value 'in-arcs n))
  (define (=out-arcs n)        (att-value 'out-arcs n))
- (define (=p-lookup n name)   (hashtable-ref (att-value 'p-lookup n) name #f))
- (define (=t-lookup n name)   (hashtable-ref (att-value 't-lookup n) name #f))
- (define (=in-lookup n name)  (hashtable-ref (att-value 'in-lookup n) name #f))
- (define (=out-lookup n name) (hashtable-ref (att-value 'out-lookup n) name #f))
+ (define (=p-lookup n name)   (hash-ref (att-value 'p-lookup n) name #f))
+ (define (=t-lookup n name)   (hash-ref (att-value 't-lookup n) name #f))
+ (define (=in-lookup n name)  (hash-ref (att-value 'in-lookup n) name #f))
+ (define (=out-lookup n name) (hash-ref (att-value 'out-lookup n) name #f))
  (define (=place n)           (att-value 'place n))
  (define (=valid? n)          (att-value 'valid? n))
  (define (=enabled? n)        (att-value 'enabled? n))
@@ -58,8 +58,8 @@
  
  ; Support Functions:
  (define (make-symbol-table decls ->key)
-   (define table (make-eq-hashtable))
-   (for-each (lambda (n) (hashtable-set! table (->key n) n)) decls)
+   (define table (make-hasheq))
+   (for-each (lambda (n) (hash-set! table (->key n) n)) decls)
    table)
  
  (define (specify-analyses)
@@ -121,14 +121,14 @@
      valid? ; Are a Petri net component and its parts well-formed?
      (Place            (lambda (n) (eq? (=p-lookup n (->name n)) n)))
      (Transition       (lambda (n) (and (eq? (=t-lookup n (->name n)) n)
-                                        (for-all =valid? (=in-arcs n))
-                                        (for-all =valid? (=out-arcs n)))))
+                                        (andmap =valid? (=in-arcs n))
+                                        (andmap =valid? (=out-arcs n)))))
      ((Transition In)  (lambda (n) (and (=place n)
                                         (eq? (=in-lookup n (->place n)) n))))
      ((Transition Out) (lambda (n) (and (=place n)
                                         (eq? (=out-lookup n (->place n)) n))))
-     (AtomicPetrinet   (lambda (n) (and (for-all =valid? (=places n))
-                                        (for-all =valid? (=transitions n))))))
+     (AtomicPetrinet   (lambda (n) (and (andmap =valid? (=places n))
+                                        (andmap =valid? (=transitions n))))))
     
     ;;; Enabled Analysis:
     
@@ -137,23 +137,26 @@
      
      (Arc
       (lambda (n)
-        (define consumers (map (lambda (f) (cons #t f)) (->consumers n)))
+        (define consumers (map (lambda (f) (vector #t f)) (->consumers n)))
         (ast-find-child*
          (lambda (i n)
            (define consumer?
-             (find (lambda (c) (and (car c) ((cdr c) (->value n)))) consumers))
+             (findf (lambda (c)
+                      (and (vector-ref c 0) ((vector-ref c 1) (->value n))))
+                    consumers))
            (when consumer?
-             (set-car! consumer? #f)
-             (set-cdr! consumer? n))
-           (and (not (find car consumers)) (map cdr consumers)))
+             (vector-set! consumer? 0 #f)
+             (vector-set! consumer? 1 n))
+           (and (not (findf (lambda (c) (vector-ref c 0)) consumers))
+                (map (lambda (c) (vector-ref c 1)) consumers)))
          (->Token* (=place n)))))
      
      (Transition
       (lambda (n)
         (call/cc
          (lambda (abort)
-           (fold-left
-            (lambda (result n)
+           (foldl
+            (lambda (n result)
               (define enabled? (=enabled? n))
               (if enabled? (append result enabled?) (abort #f)))
             (list)
@@ -172,4 +175,4 @@
               (lambda (value) (rewrite-add destination (:Token value)))
               (apply producer consumed-tokens)))
            producers
-           destinations))))))))
+           destinations)))))))

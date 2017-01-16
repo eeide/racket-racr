@@ -2,30 +2,39 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr testing) (atomic-petrinets user-interface))
+(require rackunit)
+(require "../../../racr/testing.rkt")
+(require "../user-interface.rkt")
 
 (define (run-error-cases)
-  (assert-exception ; Non-unique places.
-   (petrinet: ((A) (A))))
-  (assert-exception ; Non-unique transitions.
+  (check-exn exn:fail:user? ; Non-unique places.
+   (lambda ()
+   (petrinet: ((A) (A)))))
+  (check-exn exn:fail:user? ; Non-unique transitions.
+   (lambda ()
    (petrinet: ((A))
               (transition: a () ())
-              (transition: a () ())))
-  (assert-exception ; Unknown source place.
+              (transition: a () ()))))
+  (check-exn exn:fail:user? ; Unknown source place.
+   (lambda ()
    (petrinet: ()
-              (transition: a ((A)    ) (       ))))
-  (assert-exception ; Unknown target place.
+              (transition: a ((A)    ) (       )))))
+  (check-exn exn:fail:user? ; Unknown target place.
+   (lambda ()
    (petrinet: ()
-              (transition: a (       ) ((A)    ))))
-  (assert-exception ; Non-unique ingoing arcs.
+              (transition: a (       ) ((A)    )))))
+  (check-exn exn:fail:user? ; Non-unique ingoing arcs.
+   (lambda ()
    (petrinet: ((A))
-              (transition: a ((A) (A)) (       ))))
-  (assert-exception ; Non-unique outgoing arcs.
+              (transition: a ((A) (A)) (       )))))
+  (check-exn exn:fail:user? ; Non-unique outgoing arcs.
+   (lambda ()
    (petrinet: ((A))
-              (transition: a (       ) ((A) (A))))))
+              (transition: a (       ) ((A) (A)))))))
 
 (define (run-correct-cases)
   (petrinet: (         )                                                          )  ; Empty net.

@@ -2,6 +2,7 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
 ; Specification of the cookie automaton given on page 21, Figure 2.1 in
 ; 
@@ -10,10 +11,13 @@
 ;                                  Vieweg+Teubner, 2010
 ;                                    978-3-8348-1290-2
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (racr testing)
-        (atomic-petrinets user-interface) (atomic-petrinets analyses))
+(require rackunit)
+(require "../../../racr/core.rkt"
+         "../../../racr/testing.rkt")
+(require "../user-interface.rkt"
+         "../analyses.rkt")
 
 (define Box 'Box)
 (define Box* 'Box*)
@@ -63,265 +67,292 @@
   (set! Box* Box) ; ...rectify the box types.
   
   (let ((net (make-cookie-automaton)))
-    (assert-marking
+    (check-marking
      net
-     (list 'D Token)
-     (list 'E 7)
-     (list 'G Token)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'c)
+     (list
+      (list 'D Token)
+      (list 'E 7)
+      (list 'G Token)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(c))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 7)
-     (list 'G Token)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'a 'e)
+     (list
+      (list 'A Euro)
+      (list 'E 7)
+      (list 'G Token)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(a e))
     (fire-transition! (=t-lookup net 'a))
-    (assert-marking
+    (check-marking
      net
-     (list 'B Token)
-     (list 'D Token)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'b 'c)
+     (list
+      (list 'B Token)
+      (list 'D Token)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(b c))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'B Token)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'b 'e)
+     (list
+      (list 'A Euro)
+      (list 'B Token)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(b e))
     (fire-transition! (=t-lookup net 'e))
-    (assert-marking
+    (check-marking
      net
-     (list 'B Token)
-     (list 'D Token)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'b 'c)
+     (list
+      (list 'B Token)
+      (list 'D Token)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(b c))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'B Token)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'H Box Box Box Box Box Box* Box*))
-    (assert-enabled net 'b 'e)
+     (list
+      (list 'A Euro)
+      (list 'B Token)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'H Box Box Box Box Box Box* Box*)))
+    (check-enabled net '(b e))
     (fire-transition! (=t-lookup net 'b))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box Box)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'G Token)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'a 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box Box)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'G Token)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(a d e))
     (fire-transition! (=t-lookup net 'e))
-    (assert-marking
+    (check-marking
      net
-     (list 'C Box Box)
-     (list 'D Token)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'G Token)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'c 'd)
+     (list
+      (list 'C Box Box)
+      (list 'D Token)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'G Token)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(c d))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box Box)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'G Token)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'a 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box Box)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'G Token)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(a d e))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'G Token)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'a 'e 'd)
+     (list
+      (list 'A Euro)
+      (list 'C Box)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'G Token)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(a e d))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 5)
-     (list 'F Euro)
-     (list 'G Token)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'a 'e)
+     (list
+      (list 'A Euro)
+      (list 'E 5)
+      (list 'F Euro)
+      (list 'G Token)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(a e))
     (fire-transition! (=t-lookup net 'a))
-    (assert-marking
+    (check-marking
      net
-     (list 'B Token)
-     (list 'D Token)
-     (list 'E 3)
-     (list 'F Euro Euro)
-     (list 'H Box Box Box Box* Box*))
-    (assert-enabled net 'b 'c)
+     (list
+      (list 'B Token)
+      (list 'D Token)
+      (list 'E 3)
+      (list 'F Euro Euro)
+      (list 'H Box Box Box Box* Box*)))
+    (check-enabled net '(b c))
     (fire-transition! (=t-lookup net 'b))
-    (assert-marking
+    (check-marking
      net
-     (list 'C Box Box)
-     (list 'D Token)
-     (list 'E 3)
-     (list 'F Euro Euro)
-     (list 'G Token)
-     (list 'H Box Box* Box*))
-    (assert-enabled net 'c 'd)
+     (list
+      (list 'C Box Box)
+      (list 'D Token)
+      (list 'E 3)
+      (list 'F Euro Euro)
+      (list 'G Token)
+      (list 'H Box Box* Box*)))
+    (check-enabled net '(c d))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box Box)
-     (list 'E 3)
-     (list 'F Euro Euro)
-     (list 'G Token)
-     (list 'H Box Box* Box*))
-    (assert-enabled net 'a 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box Box)
+      (list 'E 3)
+      (list 'F Euro Euro)
+      (list 'G Token)
+      (list 'H Box Box* Box*)))
+    (check-enabled net '(a d e))
     (fire-transition! (=t-lookup net 'a))
-    (assert-marking
+    (check-marking
      net
-     (list 'B Token)
-     (list 'C Box Box)
-     (list 'D Token)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'H Box Box* Box*))
-    (assert-enabled net 'b 'c 'd)
+     (list
+      (list 'B Token)
+      (list 'C Box Box)
+      (list 'D Token)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'H Box Box* Box*)))
+    (check-enabled net '(b c d))
     (fire-transition! (=t-lookup net 'b))
-    (assert-marking
+    (check-marking
      net
-     (list 'C Box* Box Box Box)
-     (list 'D Token)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'c 'd)
+     (list
+      (list 'C Box* Box Box Box)
+      (list 'D Token)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(c d))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box* Box Box Box)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box* Box Box Box)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(d e))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box* Box Box)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box* Box Box)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(d e))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box* Box)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box* Box)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(d e))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'C Box*)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'd 'e)
+     (list
+      (list 'A Euro)
+      (list 'C Box*)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(d e))
     (fire-transition! (=t-lookup net 'd))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'e)
+     (list
+      (list 'A Euro)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(e))
     (fire-transition! (=t-lookup net 'e))
-    (assert-marking
+    (check-marking
      net
-     (list 'D Token)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'c)
+     (list
+      (list 'D Token)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(c))
     (fire-transition! (=t-lookup net 'c))
-    (assert-enabled net 'e)
-    (assert-marking
+    (check-enabled net '(e))
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
+     (list
+      (list 'A Euro)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
     (fire-transition! (=t-lookup net 'e))
-    (assert-marking
+    (check-marking
      net
-     (list 'D Token)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'c)
+     (list
+      (list 'D Token)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(c))
     (fire-transition! (=t-lookup net 'c))
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*))
-    (assert-enabled net 'e)
+     (list
+      (list 'A Euro)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*)))
+    (check-enabled net '(e))
     (fire-transition! (=t-lookup net 'e))
     ; ...
-    (assert-enabled net 'c)
-    (assert-marking
+    (check-enabled net '(c))
+    (check-marking
      net
-     (list 'D Token)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*)))
+     (list
+      (list 'D Token)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*))))
   
   (let ((net (make-cookie-automaton)))
     (rewrite-delete (=t-lookup net 'e))
     (run-petrinet! net)
-    (assert-marking
+    (check-marking
      net
-     (list 'A Euro)
-     (list 'E 1)
-     (list 'F Euro Euro Euro)
-     (list 'G Token)
-     (list 'H Box*)))
+     (list
+      (list 'A Euro)
+      (list 'E 1)
+      (list 'F Euro Euro Euro)
+      (list 'G Token)
+      (list 'H Box*))))
   
   (let ((net (make-cookie-automaton)))
     (rewrite-delete (=p-lookup net 'A))
-    (assert-exception petrinets-exception? (run-petrinet! net)))
+    (check-exn exn:fail:user? (lambda () (run-petrinet! net))))
   
   (set! Box* 'Box*)) ; Undo test fixture.
 

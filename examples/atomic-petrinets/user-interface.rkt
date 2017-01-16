@@ -2,29 +2,28 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (atomic-petrinets user-interface)
- (export initialise-petrinet-language petrinet: transition: exception:
+(require rackunit)
+(require "../../racr/core.rkt"
+         "../../racr/testing.rkt")
+(require "analyses.rkt")
+(provide
+         initialise-petrinet-language petrinet: transition: exception:
          fire-transition! run-petrinet! interpret-petrinet!
-         petrinets-exception? assert-marking assert-enabled)
- (import (rnrs) (rnrs mutable-pairs) (racr core) (racr testing)
-         (atomic-petrinets analyses))
+         #;petrinets-exception? check-marking check-enabled)
  
  ;;; Exceptions:
  
- (define-condition-type petrinets-exception
+ #;(define-condition-type petrinets-exception
    &violation
    make-petrinets-exception
    petrinets-exception?)
  
  (define (exception: message)
-   (raise-continuable
-    (condition
-     (make-petrinets-exception)
-     (make-message-condition message))))
+   (raise-user-error 'petrinets "~s" message))
  
  ;;; Syntax:
  
@@ -63,7 +62,7 @@
  (define (run-petrinet! petrinet)
    (unless (=valid? petrinet)
      (exception: "Cannot run Petri Net; The given net is not well-formed."))
-   (let ((enabled? (find =enabled? (=transitions petrinet))))
+   (let ((enabled? (findf =enabled? (=transitions petrinet))))
      (when enabled?
        (fire-transition! enabled?)
        (run-petrinet! petrinet))))
@@ -104,34 +103,41 @@
  
  ;;; Testing:
  
- (define (assert-marking net . marking) ; Each marking is a list of a place followed by its tokens.
+ (define-simple-check (check-marking net marking) ; Each marking is a list of a place followed by its tokens.
    (define marked (map (lambda (m) (=p-lookup net (car m))) marking))
    (define marked-marking (map cdr marking))
    (define !marked (filter (lambda (n) (not (memq n marked))) (=places net)))
    (define !marked-marking (map (lambda (n) (list)) !marked))
    (define (check-place place expected-tokens)
-     (define given-values (map ->value (->* (->Token* place))))
-     (define-record-type nil-record (sealed #t)(opaque #t))
-     (define Ok (make-nil-record))
+     (define given-values (list->vector (map ->value (->* (->Token* place)))))
+     (struct nil-record ())
+     (define Ok (nil-record))
      (for-each
       (lambda (expected-token)
-        (let ((value-found? (member expected-token given-values)))
-          (assert value-found?)
-          (set-car! value-found? Ok)))
+        (let ((value-found? (vector-member expected-token given-values)))
+          (unless value-found?
+            (fail-check))
+          (vector-set! given-values value-found? Ok)))
       expected-tokens)
-     (assert (for-all nil-record? given-values)))
+     (unless (eq? (vector-length given-values)
+                  (vector-count nil-record? given-values))
+       (fail-check)))
    (for-each check-place marked marked-marking)
-   (for-each check-place !marked !marked-marking))
+   (for-each check-place !marked !marked-marking)
+   #t)
  
- (define (assert-enabled net . enabled)
+ (define-simple-check (check-enabled net enabled)
    (define t-enabled (map (lambda (t) (=t-lookup net t)) enabled))
    (define t-!enabled (filter (lambda (t) (not (memq t t-enabled))) (=transitions net)))
-   (assert (for-all =enabled? t-enabled))
-   (assert (for-all (lambda (t) (not (=enabled? t))) t-!enabled)))
+   (unless (andmap =enabled? t-enabled)
+     (fail-check))
+   (unless (andmap (lambda (t) (not (=enabled? t))) t-!enabled)
+     (fail-check))
+   #t)
  
  ;;; Initialisation:
  
  (define (initialise-petrinet-language)
    (when (= (specification->phase pn) 1)
      (specify-analyses)
-     (compile-ag-specifications pn))))
+     (compile-ag-specifications pn)))
