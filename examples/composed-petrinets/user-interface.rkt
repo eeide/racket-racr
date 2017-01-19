@@ -2,19 +2,21 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (composed-petrinets user-interface)
- (export initialise-petrinet-language petrinet: transition: compose-petrinets:
+(require rackunit)
+(require "../../racr/core.rkt")
+(require (prefix-in ap: "../atomic-petrinets/user-interface.rkt"))
+(require "analyses.rkt")
+(provide
+         initialise-petrinet-language petrinet: transition: compose-petrinets:
          run-petrinet! interpret-petrinet!
-         assert-marking assert-enabled
-         (rename (ap:exception: exception:)
-                 (ap:fire-transition! fire-transition!)
-                 (ap:petrinets-exception? petrinets-exception?)))
- (import (rnrs) (racr core) (prefix (atomic-petrinets user-interface) ap:)
-         (composed-petrinets analyses))
+         check-marking check-enabled
+         (rename-out (ap:exception: exception:)
+                     (ap:fire-transition! fire-transition!)
+                     #;(ap:petrinets-exception? petrinets-exception?)))
  
  ;;; Syntax:
  
@@ -68,7 +70,7 @@
  (define (run-petrinet! petrinet) ; Refine!
    (unless (=valid? petrinet)
      (ap:exception: "Cannot run Petri Net; The given net is not well-formed."))
-   (let ((enabled? ((=subnet-iter petrinet) (lambda (name n) (find =enabled? (=transitions n))))))
+   (let ((enabled? ((=subnet-iter petrinet) (lambda (name n) (findf =enabled? (=transitions n))))))
      (when enabled?
        (ap:fire-transition! enabled?)
        (run-petrinet! petrinet))))
@@ -87,15 +89,15 @@
  
  ;;; Testing:
  
- (define (assert-marking net . marking) ; Refine!
-   (for-each (lambda (m) (apply ap:assert-marking (=find-subnet net (car m)) (cdr m))) marking))
+ (define-simple-check (check-marking net marking) ; Refine!
+   (for-each (lambda (m) (ap:check-marking (=find-subnet net (car m)) (cdr m))) marking))
  
- (define (assert-enabled net . enabled) ; Refine!
-   (for-each (lambda (e) (apply ap:assert-enabled (=find-subnet net (car e)) (cdr e))) enabled))
+ (define-simple-check (check-enabled net enabled) ; Refine!
+   (for-each (lambda (e) (ap:check-enabled (=find-subnet net (car e)) (cdr e))) enabled))
  
  ;;; Initialisation:
  
  (define (initialise-petrinet-language) ; Refine!
    (when (= (specification->phase pn) 1)
      (specify-analyses)
-     (compile-ag-specifications pn))))
+     (compile-ag-specifications pn)))

@@ -2,6 +2,7 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
 ; The implemented port concept for Petri net composition is based on
 ; 
@@ -40,11 +41,11 @@
 ;                  behaviour. In particular, the implemented firing semantics can fail if places of
 ;                  the same atomic Petri net are fused.
 
-#!r6rs
+#lang racket
 
-(library
- (composed-petrinets analyses)
- (export specify-analyses pn
+(require "../../racr/core.rkt")
+(provide
+         specify-analyses pn
          :AtomicPetrinet :Place :Token :Transition :Arc
          ->Place* ->Transition* ->Token* ->In ->Out
          ->name ->value ->place ->consumers ->* <-
@@ -56,7 +57,6 @@
          ->outport ->inport
          =ports =glueings =<-net =subnet-iter =inport? =outport?
          =find-subnet =inport =outport =glued? =fused-places)
- (import (rnrs) (rnrs mutable-pairs) (racr core))
  
  (define pn                    (create-specification))
  
@@ -87,10 +87,10 @@
  (define (=transitions n)      (att-value 'transitions n))
  (define (=in-arcs n)          (att-value 'in-arcs n))
  (define (=out-arcs n)         (att-value 'out-arcs n))
- (define (=p-lookup n name)    (hashtable-ref (att-value 'p-lookup n) name #f))
- (define (=t-lookup n name)    (hashtable-ref (att-value 't-lookup n) name #f))
- (define (=in-lookup n name)   (hashtable-ref (att-value 'in-lookup n) name #f))
- (define (=out-lookup n name)  (hashtable-ref (att-value 'out-lookup n) name #f))
+ (define (=p-lookup n name)    (hash-ref (att-value 'p-lookup n) name #f))
+ (define (=t-lookup n name)    (hash-ref (att-value 't-lookup n) name #f))
+ (define (=in-lookup n name)   (hash-ref (att-value 'in-lookup n) name #f))
+ (define (=out-lookup n name)  (hash-ref (att-value 'out-lookup n) name #f))
  (define (=place n)            (att-value 'place n))
  (define (=valid? n)           (att-value 'valid? n))
  (define (=enabled? n)         (att-value 'enabled? n))
@@ -135,11 +135,11 @@
    (append (filter (lambda (e1) (not (memq e1 s2))) s1) s2))
  
  (define (make-symbol-table decls ->key . conditions) ; Refine!
-   (define table (make-eq-hashtable))
+   (define table (make-hasheq))
    (for-each
     (lambda (n)
-      (when (for-all (lambda (c) (c n)) conditions)
-        (hashtable-set! table (->key n) n)))
+      (when (andmap (lambda (c) (c n)) conditions)
+        (hash-set! table (->key n) n)))
     decls)
    table)
  
@@ -263,7 +263,7 @@
                                           (eq? (=outport n) p))))
      (AtomicPetrinet   (lambda (n p) (and (ast-has-parent? n)
                                           (=glued? (<- n) p))))
-     (ComposedNet      (lambda (n p) (or  (find (lambda (n) (=glued? n p))
+     (ComposedNet      (lambda (n p) (or  (findf (lambda (n) (=glued? n p))
                                                 (=glueings n))
                                           (and (ast-has-parent? n)
                                                (=glued? (<- n) p))))))
@@ -292,20 +292,20 @@
     (ag-rule
      valid? ; Are a Petri net component and its parts well-formed?
      (Place            (lambda (n) (and (eq? (=p-lookup n (->name n)) n) ; Refine!
-                                        (for-all
+                                        (andmap
                                             (lambda (f)
                                               (not (eq? (=<-net f) (=<-net n))))
                                           (remq n (=fused-places n))))))
      (Transition       (lambda (n) (and (eq? (=t-lookup n (->name n)) n)
-                                        (for-all =valid? (=in-arcs n))
-                                        (for-all =valid? (=out-arcs n)))))
+                                        (andmap =valid? (=in-arcs n))
+                                        (andmap =valid? (=out-arcs n)))))
      ((Transition In)  (lambda (n) (and (=place n)
                                         (eq? (=in-lookup n (->place n)) n))))
      ((Transition Out) (lambda (n) (and (=place n)
                                         (eq? (=out-lookup n (->place n)) n))))
-     (AtomicPetrinet   (lambda (n) (and (for-all =valid? (=places n)) ; Refine!
-                                        (for-all =valid? (=transitions n))
-                                        (for-all =valid? (=ports n))))))
+     (AtomicPetrinet   (lambda (n) (and (andmap =valid? (=places n)) ; Refine!
+                                        (andmap =valid? (=transitions n))
+                                        (andmap =valid? (=ports n))))))
     
     (ag-rule
      valid? ; Complete!
@@ -319,7 +319,7 @@
                                         (eq? (=glued? (=outport n)) n))))
      (ComposedNet      (lambda (n) (and (=valid? (->Net1 n))
                                         (=valid? (->Net2 n))
-                                        (for-all =valid? (=glueings n))
+                                        (andmap =valid? (=glueings n))
                                         (not
                                          (let ((names (list)))
                                            ((=subnet-iter (->Net1 n))
@@ -336,7 +336,7 @@
      
      (Arc ; Refine!
       (lambda (n)
-        (define consumers (map (lambda (f) (cons #t f)) (->consumers n)))
+        (define consumers (map (lambda (f) (vector #t f)) (->consumers n)))
         (let loop ((places (cons (=place n) (=fused-places (=place n)))))
           (and
            (not (null? places))
@@ -344,11 +344,14 @@
             (ast-find-child*
              (lambda (i n)
                (define consumer?
-                 (find (lambda (c) (and (car c) ((cdr c) (->value n)))) consumers))
+                 (findf (lambda (c)
+                          (and (vector-ref c 0) ((vector-ref c 1) (->value n))))
+                        consumers))
                (when consumer?
-                 (set-car! consumer? #f)
-                 (set-cdr! consumer? n))
-               (and (not (find car consumers)) (map cdr consumers)))
+                 (vector-set! consumer? 0 #f)
+                 (vector-set! consumer? 1 n))
+               (and (not (findf (lambda (c) (vector-ref c 0)) consumers))
+                    (map (lambda (c) (vector-ref c 1)) consumers)))
              (->Token* (car places)))
             (loop (cdr places)))))))
      
@@ -356,8 +359,8 @@
       (lambda (n)
         (call/cc
          (lambda (abort)
-           (fold-left
-            (lambda (result n)
+           (foldl
+            (lambda (n result)
               (define enabled? (=enabled? n))
               (if enabled? (append result enabled?) (abort #f)))
             (list)
@@ -376,4 +379,4 @@
               (lambda (value) (rewrite-add destination (:Token value)))
               (apply producer consumed-tokens)))
            producers
-           destinations))))))))
+           destinations)))))))

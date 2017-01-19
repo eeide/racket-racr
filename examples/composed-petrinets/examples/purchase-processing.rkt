@@ -2,6 +2,7 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
 ; Specification of the composition example given in
 ; 
@@ -20,9 +21,11 @@
 ;                                       Vieweg+Teubner, 2010
 ;                                        978-3-8348-1290-2
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr core) (composed-petrinets user-interface) (composed-petrinets analyses))
+(require "../../../racr/core.rkt")
+(require "../user-interface.rkt"
+         "../analyses.rkt")
 
 (define (make-buyer-net)
   (petrinet:
@@ -109,19 +112,19 @@
            ((buyer payment)      ; ...payment ports.
             (seller payment)))))
     
-    (assert-enabled buyer-seller
-                    '(buyer t1)
-                    '(seller))
-    (assert-marking buyer-seller
-                    '(buyer (p1 token))
-                    '(seller (p1 token)))
+    (check-enabled buyer-seller
+                   '((buyer t1)
+                     (seller)))
+    (check-marking buyer-seller
+                   '((buyer (p1 token))
+                     (seller (p1 token))))
     (run-petrinet! buyer-seller)
-    (assert-enabled buyer-seller
-                    '(buyer)
-                    '(seller))
-    (assert-marking buyer-seller
-                    '(buyer (p2 token) (p6 token))
-                    '(seller (p4 token) (internal-order token)))
+    (check-enabled buyer-seller
+                   '((buyer)
+                     (seller)))
+    (check-marking buyer-seller
+                    '((buyer (p2 token) (p6 token))
+                      (seller (p4 token) (internal-order token))))
     
     (let ((buyer-seller-warehouse
            (compose-petrinets:
@@ -130,23 +133,23 @@
             ((seller internal-order) (warehouse internal-order))
             ((warehouse goods) (buyer goods)))))
       
-      (assert-enabled buyer-seller-warehouse
-                      '(buyer)
-                      '(seller)
-                      '(warehouse t1))
-      (assert-marking buyer-seller-warehouse
-                      '(buyer (p2 token) (p6 token))
-                      '(seller (p4 token) (internal-order token))
-                      '(warehouse (p1 token))) ; Fusion: (internal-order token)
+      (check-enabled buyer-seller-warehouse
+                     '((buyer)
+                       (seller)
+                       (warehouse t1)))
+      (check-marking buyer-seller-warehouse
+                     '((buyer (p2 token) (p6 token))
+                       (seller (p4 token) (internal-order token))
+                       (warehouse (p1 token)))) ; Fusion: (internal-order token)
       (run-petrinet! buyer-seller-warehouse)
-      (assert-enabled buyer-seller-warehouse
-                      '(buyer)
-                      '(seller)
-                      '(warehouse))
-      (assert-marking buyer-seller-warehouse
-                      '(buyer (p7 token))
-                      '(seller (p4 token))
-                      '(warehouse (p3 token))))))
+      (check-enabled buyer-seller-warehouse
+                     '((buyer)
+                       (seller)
+                       (warehouse)))
+      (check-marking buyer-seller-warehouse
+                     '((buyer (p7 token))
+                       (seller (p4 token))
+                       (warehouse (p3 token)))))))
 
 (initialise-petrinet-language)
 (run-tests)

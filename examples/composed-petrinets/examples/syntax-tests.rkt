@@ -2,10 +2,14 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (racr testing) (composed-petrinets user-interface) (composed-petrinets analyses))
+(require rackunit)
+(require "../../../racr/core.rkt")
+(require "../user-interface.rkt"
+         "../analyses.rkt")
 
 (define (make-net-1)
   (compose-petrinets: ; Not glued: (in: c | out: c | in/out: a)
@@ -28,52 +32,63 @@
 (define (run-error-cases)
   ;;; Atomic Petri nets:
   
-  (assert-exception ; Non-unique in-ports
-   (petrinet: net (A A) () ((A))))
-  (assert-exception ; Non-unique out-ports
-   (petrinet: net () (A A) ((A))))
-  (assert-exception ; Unknown in-port
-   (petrinet: net (A) () ()))
-  (assert-exception ; Unknown out-port
-   (petrinet: net () (A) ()))
+  (check-exn exn:fail:user? ; Non-unique in-ports
+   (lambda ()
+   (petrinet: net (A A) () ((A)))))
+  (check-exn exn:fail:user? ; Non-unique out-ports
+   (lambda ()
+   (petrinet: net () (A A) ((A)))))
+  (check-exn exn:fail:user? ; Unknown in-port
+   (lambda ()
+   (petrinet: net (A) () ())))
+  (check-exn exn:fail:user? ; Unknown out-port
+   (lambda ()
+   (petrinet: net () (A) ())))
   
   ;;; Flat composition structure:
   
-  (assert-exception ; Non-unique subnets
+  (check-exn exn:fail:user? ; Non-unique subnets
+   (lambda ()
    (compose-petrinets:
     (petrinet: a () () ())
-    (petrinet: a () () ())))
-  (assert-exception ; Unknown in-port glueing
+    (petrinet: a () () ()))))
+  (check-exn exn:fail:user? ; Unknown in-port glueing
+   (lambda ()
    (compose-petrinets:
     (petrinet: a (A) () ((A)))
     (petrinet: b () (A) ((A)))
-    ((b A) (a A*))))
-  (assert-exception ; Unknown out-port glueing
+    ((b A) (a A*)))))
+  (check-exn exn:fail:user? ; Unknown out-port glueing
+   (lambda ()
    (compose-petrinets:
     (petrinet: a (A) () ((A)))
     (petrinet: b () (A) ((A)))
-    ((b A*) (a A))))
-  (assert-exception ; in- to in-port glueing
+    ((b A*) (a A)))))
+  (check-exn exn:fail:user? ; in- to in-port glueing
+   (lambda ()
    (compose-petrinets:
     (petrinet: a (A) () ((A)))
     (petrinet: b (A) () ((A)))
-    ((b A) (a A))))
-  (assert-exception ; out- to out-port glueing
+    ((b A) (a A)))))
+  (check-exn exn:fail:user? ; out- to out-port glueing
+   (lambda ()
    (compose-petrinets:
     (petrinet: a () (A) ((A)))
     (petrinet: b () (A) ((A)))
-    ((b A) (a A))))
-  (assert-exception ; Twisted glueing (in-port as out-port and vice versa)
+    ((b A) (a A)))))
+  (check-exn exn:fail:user? ; Twisted glueing (in-port as out-port and vice versa)
+   (lambda ()
    (compose-petrinets:
     (petrinet: a (A) () ((A)))
     (petrinet: b () (A) ((A)))
-    ((a A) (b A))))
-  (assert-exception ; Fusion of places of the same atomic net
+    ((a A) (b A)))))
+  (check-exn exn:fail:user? ; Fusion of places of the same atomic net
+   (lambda ()
    (compose-petrinets:
     (petrinet: a (A) (A) ((A)))
     (petrinet: b (A) (B) ((A) (B)))
     ((a A) (b A))
-    ((b B) (a A))))
+    ((b B) (a A)))))
   
   ;;; Nested composition structure:
   
@@ -87,30 +102,39 @@
          (compose-petrinets:
           (petrinet: d () () ())
           (petrinet: b () () ()))))
-    (assert-exception
-     (compose-petrinets: net-1 net-2)))
+    (check-exn exn:fail:user?
+     (lambda ()
+     (compose-petrinets: net-1 net-2))))
   
-  (assert-exception ; Unknown in-port glueing
-   (compose-petrinets: (make-net-1) (make-net-2) ((c out) (f /in/))))
-  (assert-exception ; Unknown out-port glueing
-   (compose-petrinets: (make-net-1) (make-net-2) ((d /out/) (c in))))
-  (assert-exception ; in- to in-port glueing
-   (compose-petrinets: (make-net-1) (make-net-2) ((c in) (f in))))
-  (assert-exception ; out- to out-port glueing
-   (compose-petrinets: (make-net-1) (make-net-2) ((d out) (c out))))
-  (assert-exception ; Twisted glueing (in-port as out-port and vice versa)
-   (compose-petrinets: (make-net-1) (make-net-2) ((f in) (c out))))
-  (assert-exception ; Fusion of places of the same atomic net
+  (check-exn exn:fail:user? ; Unknown in-port glueing
+   (lambda ()
+   (compose-petrinets: (make-net-1) (make-net-2) ((c out) (f /in/)))))
+  (check-exn exn:fail:user? ; Unknown out-port glueing
+   (lambda ()
+   (compose-petrinets: (make-net-1) (make-net-2) ((d /out/) (c in)))))
+  (check-exn exn:fail:user? ; in- to in-port glueing
+   (lambda ()
+   (compose-petrinets: (make-net-1) (make-net-2) ((c in) (f in)))))
+  (check-exn exn:fail:user? ; out- to out-port glueing
+   (lambda ()
+   (compose-petrinets: (make-net-1) (make-net-2) ((d out) (c out)))))
+  (check-exn exn:fail:user? ; Twisted glueing (in-port as out-port and vice versa)
+   (lambda ()
+   (compose-petrinets: (make-net-1) (make-net-2) ((f in) (c out)))))
+  (check-exn exn:fail:user? ; Fusion of places of the same atomic net
+   (lambda ()
    (compose-petrinets: (make-net-1) (make-net-2)
                        ((c out) (e in/out))
                        ((e in/out) (a in/out))
-                       ((a in/out) (c in))))
-  (assert-exception ; Glueing of shadowed in-port
+                       ((a in/out) (c in)))))
+  (check-exn exn:fail:user? ; Glueing of shadowed in-port
+   (lambda ()
    (compose-petrinets: (make-net-1) (make-net-2)
-                       ((a in/out) (e in/out*))))
-  (assert-exception ; Glueing of shadowed out-port
+                       ((a in/out) (e in/out*)))))
+  (check-exn exn:fail:user? ; Glueing of shadowed out-port
+   (lambda ()
    (compose-petrinets: (make-net-1) (make-net-2)
-                       ((c out*) (f in)))))
+                       ((c out*) (f in))))))
 
 (define (run-correct-cases)
   (make-net-1)
