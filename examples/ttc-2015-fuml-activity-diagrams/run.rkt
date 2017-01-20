@@ -2,17 +2,18 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (ttc-2015-fuml-activity-diagrams user-interface))
+(require racket/cmdline)
+(require "user-interface.rkt")
 
-(define diagram (cadr (command-line)))
-(define input?
-  (let ((input (caddr (command-line))))
-    (if (string=? input ":false:") #f input)))
-(define mode (string->number (cadddr (command-line))))
-(define print-trace?
-  (not (string=? (cadddr (cdr (command-line))) ":false:")))
-
-(run-activity-diagram diagram input? mode print-trace?)
+(command-line
+ #:args (diagram input? mode print-trace?)
+ (run-activity-diagram diagram
+                       (if (string=? input? ":false:")
+                           #f
+                           input?)
+                       (string->number mode)
+                       (not (string=? print-trace? ":false:"))))

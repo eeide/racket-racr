@@ -2,17 +2,18 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (ttc-2015-fuml-activity-diagrams language)
- (export :Activity :Variable :ActivityEdge :ControlFlow :InitialNode :FinalNode :ForkNode
+(require "../../racr/core.rkt")
+(require (prefix-in pn: "../atomic-petrinets/analyses.rkt"))
+(provide
+         :Activity :Variable :ActivityEdge :ControlFlow :InitialNode :FinalNode :ForkNode
          :JoinNode :DecisionNode :MergeNode :ExecutableNode :UnaryExpression :BinaryExpression
          ->name ->initial ->source ->target
          =variables =edges =v-lookup =e-lookup =initial =valid? =v-accessor =petrinet
          Boolean Integer Undefined && // trace activate-tracing deactivate-tracing exception:)
- (import (rnrs) (racr core) (prefix (atomic-petrinets analyses) pn:))
  
  (define spec                 (create-specification))
  
@@ -39,9 +40,9 @@
  (define (=nodes n)           (att-value 'nodes n))
  (define (=edges n)           (att-value 'edges n))
  (define (=expressions n)     (att-value 'expressions n))
- (define (=v-lookup n name)   (hashtable-ref (att-value 'v-lookup n) name #f))
- (define (=n-lookup n name)   (hashtable-ref (att-value 'n-lookup n) name #f))
- (define (=e-lookup n name)   (hashtable-ref (att-value 'e-lookup n) name #f))
+ (define (=v-lookup n name)   (hash-ref (att-value 'v-lookup n) name #f))
+ (define (=n-lookup n name)   (hash-ref (att-value 'n-lookup n) name #f))
+ (define (=e-lookup n name)   (hash-ref (att-value 'e-lookup n) name #f))
  (define (=source n)          (att-value 'source n))
  (define (=target n)          (att-value 'target n))
  (define (=outgoing n)        (att-value 'outgoing n))
@@ -86,21 +87,21 @@
    (create-ast spec 'BinaryExpression (list a op op1 op2)))
  
  ; Type, Operator & Tracing Support:
- (define-record-type atom     (sealed #t)(opaque #t))
- (define Boolean              (make-atom))
- (define Integer              (make-atom))
- (define Undefined            (make-atom))
+ (struct atom ())
+ (define Boolean              (atom))
+ (define Integer              (atom))
+ (define Undefined            (atom))
  (define print-trace?         #t)
- (define (&& . a)             (for-all (lambda (x) x) a))
- (define (// . a)             (find (lambda (x) x) a))
+ (define (&& . a)             (andmap (lambda (x) x) a))
+ (define (// . a)             (findf (lambda (x) x) a))
  (define (trace . message)    (when print-trace? (for-each display message) (newline)))
  (define (activate-tracing)   (set! print-trace? #t))
  (define (deactivate-tracing) (set! print-trace? #f))
  
  ; Exceptions:
- (define-condition-type fuml-exception &violation make-fuml-exception fuml-exception?)
+ #;(define-condition-type fuml-exception &violation make-fuml-exception fuml-exception?)
  (define (exception: message)
-   (raise-continuable (condition (make-fuml-exception) (make-message-condition message))))
+   (raise-user-error 'fuml "~s" message))
  
  ;;; AST Scheme:
  
@@ -152,13 +153,13 @@
   spec
   
   (define (make-symbol-table -> l) ; Hash the entities of a list w.r.t. a certain field.
-    (define table (make-eq-hashtable))
-    (for-each (lambda (n) (hashtable-set! table (-> n) n)) l)
+    (define table (make-hasheq))
+    (for-each (lambda (n) (hash-set! table (-> n) n)) l)
     table)
   
   (define (make-connection-table -> l) ; Hash all entities of a list (equally keyed in same set).
-    (define table (make-eq-hashtable))
-    (for-each (lambda (n) (hashtable-update! table (-> n) (lambda (v) (cons n v)) (list))) l)
+    (define table (make-hasheq))
+    (for-each (lambda (n) (hash-update! table (-> n) (lambda (v) (cons n v)) (list))) l)
     table)
   
   (ag-rule
@@ -184,18 +185,18 @@
   (ag-rule
    incoming ; Clustering of nodes w.r.t. target / List of incoming edges of a node.
    (Activity       (lambda (n) (make-connection-table ->target (=edges n))))
-   (ActivityNode   (lambda (n) (hashtable-ref (=incoming (<- n)) (->name n)
+   (ActivityNode   (lambda (n) (hash-ref (=incoming (<- n)) (->name n)
                                               (list)))))
   
   (ag-rule
    outgoing ; Clustering of nodes w.r.t. source / List of outgoing edges of a node.
    (Activity       (lambda (n) (make-connection-table ->source (=edges n))))
-   (ActivityNode   (lambda (n) (hashtable-ref (=outgoing (<- n)) (->name n)
+   (ActivityNode   (lambda (n) (hash-ref (=outgoing (<- n)) (->name n)
                                               (list)))))
   
   (ag-rule
    initial ; The diagram's initial node.
-   (Activity       (lambda (n) (find (lambda (n) (ast-subtype? n 'InitialNode)) (=nodes n))))))
+   (Activity       (lambda (n) (findf (lambda (n) (ast-subtype? n 'InitialNode)) (=nodes n))))))
  
  ;;; Type Analysis:
  
@@ -240,7 +241,7 @@
           (let ((var (=v-lookup n (->guard n))))
             (and g var (eq? (->type var) Boolean)))
           (not g)))
-    (for-all guarded (=outgoing n)))
+    (andmap guarded (=outgoing n)))
   
   (ag-rule
    valid? ; Is the diagram well-formed?
@@ -256,13 +257,13 @@
    (MergeNode      (lambda (n) (and (in n >= 1) (out n = 1) (guarded n #f))))
    (DecisionNode   (lambda (n) (and (in n = 1) (out n >= 1) (guarded n #t))))
    (ExecutableNode (lambda (n) (and (in n = 1) (out n = 1) (guarded n #f)
-                                    (for-all =well-typed? (=expressions n)))))
+                                    (andmap =well-typed? (=expressions n)))))
    (Activity
     (lambda (n)
       (and (=initial n)
-           (for-all =valid? (=variables n))
-           (for-all =valid? (=nodes n))
-           (for-all =valid? (=edges n)))))))
+           (andmap =valid? (=variables n))
+           (andmap =valid? (=nodes n))
+           (andmap =valid? (=edges n)))))))
  
  ;;; Code Generation:
  
@@ -336,12 +337,12 @@
    
    (Activity
     (lambda (n)
-      (fold-left (lambda (result n) (append (=transitions n) result)) (list) (=nodes n))))
+      (foldl (lambda (n result) (append (=transitions n) result)) (list) (=nodes n))))
    
    (ActivityNode
     (lambda (n)
-      (fold-left
-       (lambda (transitions incoming)
+      (foldl
+       (lambda (incoming transitions)
          (if (ast-subtype? (=source incoming) 'ForkNode)
              transitions
              (cons
@@ -410,4 +411,4 @@
       (define op (->operator n))
       (lambda () (rewrite-terminal 'value assignee (op (op1) (op2))))))))
  
- (compile-ag-specifications spec))
+ (compile-ag-specifications spec)

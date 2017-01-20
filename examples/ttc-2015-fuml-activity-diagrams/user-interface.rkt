@@ -2,17 +2,17 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (ttc-2015-fuml-activity-diagrams user-interface)
- (export run-activity-diagram)
- (import (rnrs) (racr core) (racr testing)
-         (prefix (atomic-petrinets analyses) pn:)
-         (prefix (atomic-petrinets user-interface) pn:)
-         (ttc-2015-fuml-activity-diagrams language)
-         (ttc-2015-fuml-activity-diagrams parser))
+(require "../../racr/core.rkt"
+         "../../racr/testing.rkt")
+(require (prefix-in pn: "../atomic-petrinets/analyses.rkt")
+         (prefix-in pn: "../atomic-petrinets/user-interface.rkt"))
+(require "language.rkt"
+         "parser.rkt")
+(provide run-activity-diagram)
  
  (define (run-activity-diagram diagram-file input-file mode print-trace?) ; Execute diagram.
    (define activity (parse-diagram diagram-file))
@@ -25,7 +25,7 @@
         (unless (eq? (->initial variable) Undefined) (exception: "Unknown Input"))
         (rewrite-terminal 'initial variable (->initial n)))
       (parse-diagram-input input-file)))
-   (unless (for-all (lambda (n) (not (eq? (->initial n) Undefined))) (=variables activity))
+   (unless (andmap (lambda (n) (not (eq? (->initial n) Undefined))) (=variables activity))
      (exception: "Missing Input"))
    (when (> mode 1)
      (unless (=valid? activity) (exception: "Invalid Diagram"))
@@ -47,4 +47,4 @@
                 (lambda (n) (trace (->name n) " = " ((=v-accessor n))))
                 (=variables activity)))))))))
  
- (pn:initialise-petrinet-language))
+ (pn:initialise-petrinet-language)

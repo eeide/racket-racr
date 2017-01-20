@@ -2,13 +2,12 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (ttc-2015-fuml-activity-diagrams parser)
- (export parse-diagram parse-diagram-input)
- (import (rnrs) (ttc-2015-fuml-activity-diagrams language))
+(require "language.rkt")
+(provide parse-diagram parse-diagram-input)
  
  (define (parse-diagram file) ; Parse activity diagram of input file.
    (with-input-from-file file parse-activity))
@@ -26,7 +25,7 @@
    (lambda constraints
      (define current-char (peek-char))
      (and (not (eof-object? current-char))
-          (for-all (lambda (f) (f current-char)) constraints)
+          (andmap (lambda (f) (f current-char)) constraints)
           current-char)))
  
  (define r-char ; Similar to p-char but additionally increments the parsing position.
@@ -80,7 +79,7 @@
    (if (p-char char-numeric?) (parse-integer) (parse-boolean)))
  
  (define (parse-keyword keyword) ; Parse given character sequence and consume trailing whitespace.
-   (string-for-each (lambda (c) (r-char (char= c))) keyword)
+   (sequence-for-each (lambda (c) (r-char (char= c))) keyword)
    (consume-whitespace))
  
  (define (parse-list f) ; Parse comma separated list of given parser combinator.
@@ -88,16 +87,16 @@
    (cond ((p-char (char= #\,)) (parse-keyword ",") (cons elem (parse-list f)))
          (else (list elem))))
  
- (define in-table (make-eq-hashtable 3000)) ; Tracks consistency of in-edges between nodes & edges.
- (define out-table (make-eq-hashtable 3000)) ; Tracks consistency of out-edges.
+ (define in-table (make-hasheq)) ; Tracks consistency of in-edges between nodes & edges.
+ (define out-table (make-hasheq)) ; Tracks consistency of out-edges.
  
  (define (parse-activity)
    (define name #f)
    (define Variable* (list))
    (define ActivityNode* (list))
    (define ActivityEdge* (list))
-   (hashtable-clear! in-table)
-   (hashtable-clear! out-table)
+   (hash-clear! in-table)
+   (hash-clear! out-table)
    (consume-whitespace)
    (parse-keyword "activity")
    (set! name (parse-identifier))
@@ -124,14 +123,14 @@
    (let ((activity (:Activity name Variable* ActivityNode* ActivityEdge*)))
      (unless
          (and
-          (for-all
+          (andmap
               (lambda (n)
-                (define in (hashtable-ref in-table (->name n) #f))
-                (define out (hashtable-ref out-table (->name n) #f))
+                (define in (hash-ref in-table (->name n) #f))
+                (define out (hash-ref out-table (->name n) #f))
                 (and in out (eq? (->target n) in) (eq? (->source n) out)))
             (=edges activity))
-          (for-all (lambda (k) (=e-lookup activity k)) (vector->list (hashtable-keys in-table)))
-          (for-all (lambda (k) (=e-lookup activity k)) (vector->list (hashtable-keys out-table))))
+          (andmap (lambda (k) (=e-lookup activity k)) (hash-keys in-table))
+          (andmap (lambda (k) (=e-lookup activity k)) (hash-keys out-table)))
        (exception: "Parsing Error (inconsistent edges)"))
      activity))
  
@@ -228,9 +227,9 @@
      (parse-keyword "(")
      (for-each
       (lambda (id)
-        (when (hashtable-ref in-table id #f)
+        (when (hash-ref in-table id #f)
           (exception: "Parsing Error (inconsistent edges)"))
-        (hashtable-set! in-table id node-name))
+        (hash-set! in-table id node-name))
       (parse-list parse-identifier))
      (parse-keyword ")"))
    (when (p-char (char= #\o))
@@ -238,9 +237,9 @@
      (parse-keyword "(")
      (for-each
       (lambda (id)
-        (when (hashtable-ref out-table id #f)
+        (when (hash-ref out-table id #f)
           (exception: "Parsing Error (inconsistent edges)"))
-        (hashtable-set! out-table id node-name))
+        (hash-set! out-table id node-name))
       (parse-list parse-identifier))
      (parse-keyword ")")))
  
@@ -259,4 +258,4 @@
      (parse-keyword "[")
      (set! guard (parse-identifier))
      (parse-keyword "]"))
-   (if guard (:ControlFlow name source target guard) (:ActivityEdge name source target))))
+   (if guard (:ControlFlow name source target guard) (:ActivityEdge name source target)))
