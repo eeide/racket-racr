@@ -2,14 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple name-analysis)
- (export
+(require "../../racr/core.rkt")
+(provide
   specify-name-analysis)
- (import (rnrs) (racr core))
  
  (define specify-name-analysis
    (lambda (siple-specification)
@@ -53,4 +52,4 @@
        declaration
        (Reference
         (lambda (n)
-          (att-value 'lookup n (ast-child 'name n)))))))))
+          (att-value 'lookup n (ast-child 'name n))))))))

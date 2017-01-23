@@ -2,14 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple control-flow-analysis)
- (export
+(require "../../racr/core.rkt")
+(provide
   specify-control-flow-analysis)
- (import (rnrs) (racr core))
  
  (define union
    (lambda (s1 s2)
@@ -170,4 +169,4 @@
        
        ((BinaryExpression Operand1)
         (lambda (n)
-          (list (ast-sibling 'Operand2 n)))))))))
+          (list (ast-sibling 'Operand2 n))))))))

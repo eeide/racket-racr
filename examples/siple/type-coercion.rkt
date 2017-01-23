@@ -2,18 +2,15 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple type-coercion)
- (export
+(require "../../racr/core.rkt")
+(require "type.rkt")
+(provide
   perform-type-coercions
   specify-type-coercion)
- (import
-  (rnrs)
-  (racr core)
-  (siple type))
  
  (define perform-type-coercions
    (lambda (n siple-specification)
@@ -71,7 +68,7 @@
           (let ((procedure-type (att-value 'type (ast-child 'Procedure n))))
             (and (type-procedure? procedure-type)
                  (= (length (type-paras procedure-type)) (ast-num-children (ast-child 'Arguments n)))
-                 (exists
+                 (ormap
                   (lambda (para-type arg)
                     (and (type-real? para-type) (type-integer? (att-value 'type arg)) arg))
                   (type-paras procedure-type)
@@ -85,4 +82,4 @@
                 (ast-child 'Operand1 n))
            (and (type-real? (att-value 'type (ast-child 'Operand1 n)))
                 (type-integer? (att-value 'type (ast-child 'Operand2 n)))
-                (ast-child 'Operand2 n))))))))))
+                (ast-child 'Operand2 n)))))))))

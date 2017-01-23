@@ -2,15 +2,15 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple state)
- (export
+(require "../../racr/core.rkt")
+(provide
   make-state
   state-current-frame
-  state-current-frame-set!
+  set-state-current-frame!
   state-output-port
   state-allocate
   state-access
@@ -18,24 +18,25 @@
   frame-procedure
   frame-closure
   frame-environment
-  frame-environment-set!
+  set-frame-environment!
   frame-return-value
-  frame-return-value-set!
+  set-frame-return-value!
   make-memory-location
   memory-location-value
-  memory-location-value-set!)
- (import (rnrs) (racr core))
+  set-memory-location-value!)
  
- (define-record-type state
-   (fields (mutable current-frame) output-port))
+ (struct state
+   ((current-frame #:mutable)
+    output-port)
+   #:constructor-name make-state)
  
  (define state-allocate
    (lambda (state decl value)
      (let* ((env (frame-environment (state-current-frame state)))
             (entry (assq decl env)))
        (if entry
-           (memory-location-value-set! (cdr entry) value)
-           (frame-environment-set! (state-current-frame state) (cons (cons decl (make-memory-location value)) env))))))
+           (set-memory-location-value! (cdr entry) value)
+           (set-frame-environment! (state-current-frame state) (cons (cons decl (make-memory-location value)) env))))))
  
  (define state-access
    (lambda (state decl)
@@ -45,8 +46,13 @@
              (cdr entity?)
              (loop (frame-closure frame)))))))
  
- (define-record-type frame
-   (fields procedure closure (mutable environment) (mutable return-value)))
+ (struct frame
+   (procedure
+    closure
+    (environment #:mutable)
+    (return-value #:mutable))
+   #:constructor-name make-frame)
  
- (define-record-type memory-location
-   (fields (mutable value))))
+ (struct memory-location
+   ((value #:mutable))
+   #:constructor-name make-memory-location)

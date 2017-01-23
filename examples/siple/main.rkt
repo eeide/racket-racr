@@ -2,38 +2,35 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple main)
- (export
+(require "../../racr/core.rkt")
+(require "exception-api.rkt"
+         "type.rkt"
+         "state.rkt"
+         "lexer.rkt"
+         "ast.rkt"
+         "parser.rkt"
+         "access-support.rkt"
+         "name-analysis.rkt"
+         "type-analysis.rkt"
+         "type-coercion.rkt"
+         "control-flow-analysis.rkt"
+         "well-formedness.rkt"
+         "interpreter.rkt")
+(provide
   siple-specification
   siple-interpret)
- (import
-  (rnrs)
-  (racr core)
-  (siple exception-api)
-  (siple type)
-  (siple state)
-  (siple lexer)
-  (siple ast)
-  (siple parser)
-  (siple access-support)
-  (siple name-analysis)
-  (siple type-analysis)
-  (siple type-coercion)
-  (siple control-flow-analysis)
-  (siple well-formedness)
-  (siple interpreter))
  
  (define siple-interpret
    (case-lambda
      (()
       (display "Enter SiPLE Program (Finish with EOF Character).\n")
-      (let ((program (get-string-all (current-input-port))))
+      (let ((program (port->string (current-input-port))))
         (display "Program Entered. Process Program...\n")
-        (siple-interpret (open-string-input-port program))))
+        (siple-interpret (open-input-string program))))
      ((input)
       (siple-interpret input (current-output-port)))
      ((input output-port)
@@ -56,7 +53,7 @@
              ; Avoids printing the interpretation's result state:
              (let ((dummy-var #f)) (set! dummy-var #f))))
          (lambda ()
-           (close-port input-port)))))))
+           (close-input-port input-port)))))))
  
  ; Initialize SiPLE:
  (define siple-specification (create-specification))
@@ -69,4 +66,4 @@
    (specify-type-coercion siple-specification)
    (specify-control-flow-analysis siple-specification)
    (specify-well-formedness siple-specification)
-   (compile-ag-specifications siple-specification)))
+   (compile-ag-specifications siple-specification))

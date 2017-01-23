@@ -2,25 +2,19 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple exception-api)
- (export
+(provide
   throw-siple-exception
-  siple-exception?)
- (import
-  (rnrs))
+  #;siple-exception?)
  
- (define-condition-type siple-exception
+ #;(define-condition-type siple-exception
    &violation
    make-siple-exception
    siple-exception?)
  
  (define throw-siple-exception
    (lambda (message)
-     (raise-continuable
-      (condition
-       (make-siple-exception)
-       (make-message-condition message))))))
+     (raise-user-error 'siple "~s" message)))

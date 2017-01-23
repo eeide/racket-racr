@@ -2,14 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple ast)
- (export
+(require "../../racr/core.rkt")
+(provide
   specify-ast)
- (import (rnrs) (racr core))
  
  (define specify-ast
    (lambda (siple-specification)
@@ -66,4 +65,4 @@
       (ast-rule 'Addition:ArithmeticExpression->)
       (ast-rule 'Subtraction:ArithmeticExpression->)
       (ast-rule 'Multiplication:ArithmeticExpression->)
-      (ast-rule 'Division:ArithmeticExpression->)))))
+      (ast-rule 'Division:ArithmeticExpression->))))

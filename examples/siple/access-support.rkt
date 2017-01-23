@@ -2,14 +2,13 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple access-support)
- (export
+(require "../../racr/core.rkt")
+(provide
   specify-access-support)
- (import (rnrs) (racr core))
  
  (define specify-access-support
    (lambda (siple-specification)
@@ -78,7 +77,7 @@
        as-integer
        (Constant
         (lambda (n)
-          (if (not (find
+          (if (not (findf
                     (lambda (c) (char=? c #\.))
                     (string->list (ast-child 'lexem n))))
               (att-value 'as-number n)
@@ -88,8 +87,8 @@
        as-real
        (Constant
         (lambda (n)
-          (if (find
+          (if (findf
                (lambda (c) (char=? c #\.))
                (string->list (ast-child 'lexem n)))
               (att-value 'as-number n)
-              'siple:nil))))))))
+              'siple:nil)))))))

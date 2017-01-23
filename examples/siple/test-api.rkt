@@ -2,23 +2,20 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple test-api)
- (export
+(require "../../racr/core.rkt"
+         "../../racr/testing.rkt")
+(require "lexer.rkt"
+         "parser.rkt"
+         "type.rkt"
+         "main.rkt")
+(provide
   test-lexer
   test-parser
   test-compiler)
- (import
-  (rnrs)
-  (racr core)
-  (racr testing)
-  (siple lexer)
-  (siple parser)
-  (siple type)
-  (siple main))
  
  (define test-lexer
    (lambda (input-file-name)
@@ -64,8 +61,8 @@
                      (my-display #\newline)
                      (lexer-loop (lexer))))))))
         (lambda ()
-          (close-port input-port)
-          (close-port output-port))))))
+          (close-input-port input-port)
+          (close-output-port output-port))))))
  
  (define test-ast
    (lambda (input-file-name perform-type-coercions? attribute-pretty-printer-list)
@@ -81,8 +78,8 @@
              (print-ast ast attribute-pretty-printer-list output-port)
              "Input successfully processed.")))
         (lambda ()
-          (close-port input-port)
-          (close-port output-port))))))
+          (close-input-port input-port)
+          (close-output-port output-port))))))
  
  (define test-parser
    (lambda (input-file-name)
@@ -97,4 +94,4 @@
        (cons 'main-procedure (lambda (n) (if n (att-value 'dewey-address n) #f)))
        (cons 'declaration (lambda (n) (if n (att-value 'dewey-address n) #f)))
        (cons 'type (lambda (n) (type-pretty-print n)))
-       (cons 'local-correct? (lambda (n) (if n #t #f))))))))
+       (cons 'local-correct? (lambda (n) (if n #t #f)))))))

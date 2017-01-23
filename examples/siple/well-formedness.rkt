@@ -2,14 +2,14 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple well-formedness)
- (export
+(require "../../racr/core.rkt")
+(require "type.rkt")
+(provide
   specify-well-formedness)
- (import (rnrs) (racr core) (siple type))
  
  (define specify-well-formedness
    (lambda (siple-specification)
@@ -54,7 +54,7 @@
             (type-undefined? (ast-child 'returntype n))
             (and
              (not (null? (att-value 'cf-local-exits (ast-child 'Body n))))
-             (for-all
+             (andmap
                  (lambda (n)
                    (att-value 'procedure-return-in-context n))
                (att-value 'cf-local-exits (ast-child 'Body n))))))))
@@ -118,4 +118,4 @@
        
        (Expression
         (lambda (n)
-          (not (type-error-type? (att-value 'type n))))))))))
+          (not (type-error-type? (att-value 'type n)))))))))

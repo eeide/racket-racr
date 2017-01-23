@@ -2,12 +2,11 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple type)
- (export
+(provide
   type-rtype
   type-paras
   type-boolean?
@@ -28,10 +27,10 @@
   type-eq?
   type-beq?
   type-pretty-print)
- (import (rnrs))
  
- (define-record-type type
-   (fields domain rtype paras))
+  (struct type
+    (domain rtype paras)
+    #:constructor-name make-type)
  
  (define type-boolean?
    (lambda (t) (eq? (type-domain t) 'Boolean)))
@@ -78,7 +77,7 @@
           (not (type-beq? (type-rtype t1) (type-rtype t2)))))
         (type-error-type))
        ((or (not (= (length (type-paras t1)) (length (type-paras t2))))
-            (find
+            (findf
              (lambda (pair)
                (not (type-beq? (car pair) (cdr pair))))
              (map cons (type-paras t1) (type-paras t2))))
@@ -102,8 +101,8 @@
           ((type-procedure? t)
            (string-append
             "("
-            (fold-left
-             (lambda (result para)
+            (foldl
+             (lambda (para result)
                (string-append result ", " (type-pretty-print para)))
              (if paras?
                  (type-pretty-print (car paras))
@@ -119,4 +118,4 @@
                      ":")
                  (type-pretty-print rtype)))
             ")"))
-          (else "")))))))
+          (else ""))))))

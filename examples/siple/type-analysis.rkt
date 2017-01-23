@@ -2,14 +2,14 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple type-analysis)
- (export
+(require "../../racr/core.rkt")
+(require "type.rkt")
+(provide
   specify-type-analysis)
- (import (rnrs) (racr core) (siple type))
  
  (define specify-type-analysis
    (lambda (siple-specification)
@@ -61,7 +61,7 @@
                 (if (= (length (type-paras procedure-type)) (ast-num-children argument-list))
                     (ast-for-each-child
                      (lambda (i n)
-                       (if (not (type-beq? (att-value 'type n) (list-ref (type-paras procedure-type) (- i 1))))
+                       (when (not (type-beq? (att-value 'type n) (list-ref (type-paras procedure-type) (- i 1))))
                            (set! result (type-error-type))))
                      argument-list)
                     (set! result (type-error-type)))
@@ -120,4 +120,4 @@
                 (op2-type (att-value 'type (ast-child 'Operand2 n))))
             (if (and (type-number? op1-type) (type-beq? op1-type op2-type))
                 op1-type
-                (type-error-type))))))))))
+                (type-error-type)))))))))

@@ -2,14 +2,16 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple interpreter)
- (export
+(require "../../racr/core.rkt")
+(require "type.rkt"
+         "state.rkt"
+         "exception-api.rkt")
+(provide
   weave-interpreter)
- (import (rnrs) (racr core) (siple type) (siple state) (siple exception-api))
  
  (define weave-interpreter
    (lambda (ast)
@@ -37,11 +39,11 @@
             (let* ((env-prototype (memory-location-value (state-access vm (att-value 'main-procedure n))))
                    (env-new (make-frame (frame-procedure env-prototype) (frame-closure env-prototype) (list) 'siple:nil))
                    (env-old (state-current-frame vm)))
-              (state-current-frame-set! vm env-new)
+              (set-state-current-frame! vm env-new)
               ; Execute the main procedure:
               ((ast-annotation (ast-child 'Body (frame-procedure env-new)) 'interpret) vm)
               ; Restore the old execution environment:
-              (state-current-frame-set! vm env-old)
+              (set-state-current-frame! vm env-old)
               vm))))
        
        (weave
@@ -62,7 +64,7 @@
              (ast-for-each-child
               (lambda (i n)
                 ((ast-annotation n 'interpret) s)
-                (if (not (eq? (frame-return-value (state-current-frame s)) 'siple:nil))
+                (when (not (eq? (frame-return-value (state-current-frame s)) 'siple:nil))
                     (break)))
               (ast-child 'Statement* n))))))
        
@@ -71,7 +73,7 @@
         (lambda (n s)
           (if ((ast-annotation (ast-child 'Condition n) 'interpret) s)
               ((ast-annotation (ast-child 'Body n) 'interpret) s)
-              (if (> (ast-num-children (ast-child 'Alternative n)) 0)
+              (when (> (ast-num-children (ast-child 'Alternative n)) 0)
                   ((ast-annotation (ast-child 1 (ast-child 'Alternative n)) 'interpret) s)))))
        
        (weave
@@ -91,7 +93,7 @@
        (weave
         'VariableAssignment
         (lambda (n s)
-          (memory-location-value-set!
+          (set-memory-location-value!
            ((ast-annotation (ast-child 'LHand n) 'interpret) s)
            ((ast-annotation (ast-child 'RHand n) 'interpret) s))))
        
@@ -99,8 +101,8 @@
         'ProcedureReturn
         (lambda (n s)
           (if (> (ast-num-children (ast-child 'Expression* n)) 0)
-              (frame-return-value-set! (state-current-frame s) ((ast-annotation (ast-child 1 (ast-child 'Expression* n)) 'interpret) s))
-              (frame-return-value-set! (state-current-frame s) (type-undefined)))))
+              (set-frame-return-value! (state-current-frame s) ((ast-annotation (ast-child 1 (ast-child 'Expression* n)) 'interpret) s))
+              (set-frame-return-value! (state-current-frame s) (type-undefined)))))
        
        (weave
         'Write
@@ -114,7 +116,7 @@
         (lambda (n s)
           (let ((type (type-rtype (att-value 'type (ast-child 'Expression n))))
                 (location ((ast-annotation (ast-child 'Expression n) 'interpret) s)))
-            (memory-location-value-set!
+            (set-memory-location-value!
              location
              (let loop ((input (read)))
                (cond
@@ -163,17 +165,17 @@
                (set! args (append args (list ((ast-annotation n 'interpret) s)))))
              (ast-child 'Arguments n))
             ; Prepare the execution environment:
-            (state-current-frame-set! s env-new)
+            (set-state-current-frame! s env-new)
             (ast-for-each-child
              (lambda (i n)
                (state-allocate s n (list-ref args (- i 1))))
              (ast-child 'Parameters (frame-procedure env-new)))
             ; Execute the procedure:
             ((ast-annotation (ast-child 'Body (frame-procedure env-new)) 'interpret) s)
-            (if (not (type-undefined? (att-value 'type n)))
+            (when (not (type-undefined? (att-value 'type n)))
                 (set! result (frame-return-value env-new)))
             ; Restore the old execution environment:
-            (state-current-frame-set! s env-old)
+            (set-state-current-frame! s env-old)
             result)))
        
        (weave
@@ -196,10 +198,10 @@
         (lambda (n s)
           (let ((value (memory-location-value ((ast-annotation (ast-child 'Operand n) 'interpret) s))))
             (if (eq? value 'siple:nil)
-                (assertion-violation
+                (raise-user-error
                  'interpret
-                 "SiPLE interpreter exception: Read access to uninitialized entity."
-                 "no-irritant-available")
+                 "~s"
+                 "SiPLE interpreter exception: Read access to uninitialized entity.")
                 value))))
        
        (weave
@@ -218,4 +220,4 @@
               ((Addition) (+ op1 op2))
               ((Subtraction) (- op1 op2))
               ((Multiplication) (* op1 op2))
-              ((Division) (/ op1 op2))))))))))
+              ((Division) (/ op1 op2)))))))))

@@ -2,22 +2,22 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple lexer)
- (export
+(require "exception-api.rkt")
+(provide
   token-source
   token-line
   token-column
   token-type
   token-value
   construct-lexer)
- (import (rnrs) (siple exception-api))
  
- (define-record-type token
-   (fields source line column type value))
+ (struct token
+   (source line column type value)
+   #:constructor-name make-token)
  
  (define construct-lexer
    (lambda (input-name input-port tabulator-size)
@@ -35,7 +35,7 @@
                       (set! column-position 1)
                       c)
                      ((char=? c #\tab)
-                      (set! column-position (+ (+ column-position (- tabulator-size (mod column-position tabulator-size))) 1))
+                      (set! column-position (+ (+ column-position (- tabulator-size (modulo column-position tabulator-size))) 1))
                       c)
                      (else
                       (set! column-position (+ column-position 1))
@@ -292,4 +292,4 @@
              ((char=? c #\#)
               (new-token 'NOT-EQUAL "#"))
              (else
-              (lexer-error "Illegal character." c)))))))))
+              (lexer-error "Illegal character." c))))))))

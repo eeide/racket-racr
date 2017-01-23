@@ -2,14 +2,17 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(library
- (siple parser)
- (export
+(require "../../racr/core.rkt")
+(require "exception-api.rkt"
+         "type.rkt"
+         "lexer.rkt"
+         "type-coercion.rkt")
+(provide
   construct-parser)
- (import (rnrs) (racr core) (siple exception-api) (siple type) (siple lexer) (siple type-coercion))
  
  (define construct-parser
    (lambda (lexer siple-specification perform-type-coercions?)
@@ -72,7 +75,7 @@
                     (match-token! 'Procedure "Malformed procedure declaration. Missing procedure declaration start delimiter [Procedure].")
                     (set! name (match-token! 'IDENTIFIER "Malformed procedure declaration. Missing name."))
                     (match-token! 'PARENTHESIS-OPEN "Malformed procedure declaration. Missing parameter list start delimiter [(].")
-                    (if (match-token? 'Var)
+                    (when (match-token? 'Var)
                         (set! paras
                               (let loop ((paras (list (parse-variable-decl))))
                                 (if (match-token? 'COMMA)
@@ -81,7 +84,7 @@
                                       (loop (cons (parse-variable-decl) paras)))
                                     (reverse paras)))))
                     (match-token! 'PARENTHESIS-CLOSE "Malformed procedure declaration. Parameter list not properly finished; Missing [)].")
-                    (if (match-token? 'COLON)
+                    (when (match-token? 'COLON)
                         (begin
                           (read-next-token) ; Consume the ":"
                           (set! r-type (parse-type))))
@@ -106,7 +109,7 @@
                (parse-block-content
                 (lambda (end-delimiters)
                   (let loop ((content (list)))
-                    (if (find
+                    (if (findf
                          (lambda (delimiter)
                            (match-token? delimiter))
                          end-delimiters)
@@ -129,7 +132,7 @@
                                   (set! cond (parse-expression))
                                   (match-token! 'Then "Malformed if. Missing [Then].")
                                   (set! then (parse-block-content (list 'Else 'Fi)))
-                                  (if (match-token? 'Else)
+                                  (when (match-token? 'Else)
                                       (begin
                                         (read-next-token) ; Consume the "Else"
                                         (set! else (list (parse-block-content (list 'Fi))))))
@@ -189,7 +192,7 @@
                     (match-token! 'Call "Malformed explicit procedure call. Missing explicit procedure call start delimiter [Call].")
                     (match-token! 'PARENTHESIS-OPEN "Malformed explicit procedure call. Missing [(].")
                     (set! proc-expr (parse-expression))
-                    (if (match-token? 'COLON)
+                    (when (match-token? 'COLON)
                         (begin
                           (read-next-token) ; Consume the ":"
                           (set! args (parse-procedure-call-arguments))))
@@ -371,7 +374,7 @@
                            (paras (list)))
                        (read-next-token) ; Consume the "Procedure"
                        (match-token! 'PARENTHESIS-OPEN "Malformed procedure type. Missing parameter list start delimiter [(].")
-                       (if (not (match-token? 'PARENTHESIS-CLOSE))
+                       (when (not (match-token? 'PARENTHESIS-CLOSE))
                            (set! paras
                                  (let loop ((paras (list (parse-type))))
                                    (if (match-token? 'COMMA)
@@ -380,7 +383,7 @@
                                          (loop (cons (parse-type) paras)))
                                        (reverse paras)))))
                        (match-token! 'PARENTHESIS-CLOSE "Malformed procedure type. Parameter list not properly finished; Missing [)].")
-                       (if (match-token? 'COLON)
+                       (when (match-token? 'COLON)
                            (begin
                              (read-next-token) ; Consume the ":"
                              (set! rtype (parse-type))))
@@ -391,4 +394,4 @@
           (let ((ast (parse-compilation-unit)))
             (when perform-type-coercions?
               (perform-type-coercions ast siple-specification))
-            ast)))))))
+            ast))))))

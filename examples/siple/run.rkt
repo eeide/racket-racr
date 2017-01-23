@@ -2,17 +2,18 @@
 ; terms of the MIT license (X11 license) which accompanies this distribution.
 
 ; Author: C. Bürger
+; Ported to Racket by: Eric Eide
 
-#!r6rs
+#lang racket
 
-(import (rnrs) (rnrs mutable-pairs) (racr testing) (siple main) (siple exception-api))
+(require racket/cmdline)
+(require rackunit)
+(require "../../racr/testing.rkt")
+(require "main.rkt"
+         "exception-api.rkt")
 
-(define program (cadr (command-line)))
-(define incorrect? (string=? (caddr (command-line)) ":true:"))
-
-(set-car! (command-line) program) ; BUG: Command line arguments immutable in Larceny and Racket!
-(set-cdr! (command-line) (cdddr (command-line)))
-
-(if incorrect?
-    (assert-exception siple-exception? (siple-interpret program))
-    (siple-interpret program))
+(command-line
+ #:args (program incorrect?)
+ (if (string=? incorrect? ":true:")
+     (check-exn exn:fail:user? (lambda () (siple-interpret program)))
+     (siple-interpret program)))
